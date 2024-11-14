@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# Logs
+logs/
+*.log
+
+# Data files
+data/raw/
+data/processed/
+
+# Configuration files with secrets
+config/*.ini
+config/*.yaml
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+*.manifest
+*.spec
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
