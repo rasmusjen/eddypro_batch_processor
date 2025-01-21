@@ -74,9 +74,11 @@ from pathlib import Path
 import sys
 import time
 import argparse
+import configparser
 import multiprocessing
 from multiprocessing import Pool
 from logging.handlers import RotatingFileHandler
+import pandas as pd
 
 def load_config(config_path: Path) -> dict:
     """
@@ -129,6 +131,7 @@ def validate_config(config: dict) -> None:
         "years_to_process",
         "input_dir_pattern",
         "output_dir_pattern",
+        "ecmd_file",  # Added missing comma here
         "stream_output",
         "log_level",
         "multiprocessing",
@@ -221,91 +224,78 @@ def get_raw_files(raw_data_dir: Path, site_id: str) -> list:
     logging.debug(f"Found {len(matching_files)} raw files in {raw_data_dir}")
     return matching_files
 
-def modify_project_file(
+def build_project_file(
     template_file: Path,
     project_file: Path,
     raw_data_dir: Path,
     output_dir: Path,
     site_id: str,
-    year: int
+    md: pd.Series
 ) -> int:
     """
-    Modify the EddyPro project file based on raw data and template.
+    Build the EddyPro project file based on template and metadata.
 
     This function reads a project template file, updates various parameters such as file paths
-    and data periods based on the available raw data, and writes the modified project file to
-    the specified output directory. It also copies necessary metadata files to the output location.
+    and metadata based on the provided metadata and site information, and writes the updated
+    project file to the specified output directory.
 
     Args:
-        template_file (Path): 
-            The path to the EddyPro project template file.
-        project_file (Path): 
-            The path where the modified EddyPro project file will be saved.
-        raw_data_dir (Path): 
-            The directory containing raw data files used to determine data period coverage.
-        output_dir (Path): 
-            The directory where processed data and metadata files will be stored.
-        site_id (str): 
-            The identifier for the site, used in constructing file names.
-        year (int): 
-            The year corresponding to the data being processed, used in file naming.
+        template_file (Path):
+            Path to the EddyPro project template file.
+        project_file (Path):
+            Path where the updated EddyPro project file will be saved.
+        raw_data_dir (Path):
+            Directory containing raw data files used for processing.
+        output_dir (Path):
+            Directory where processed data and metadata files will be stored.
+        site_id (str):
+            Identifier for the site, used in constructing file names.
+        md (pd.Series):
+            Metadata series obtained from the ECMD file.
 
     Returns:
-        int: 
+        int:
             The number of raw data files processed. Returns 0 if no files were found or if an error occurred.
     """
+
     raw_files = get_raw_files(raw_data_dir, site_id)
     if not raw_files:
         logging.warning(f"No raw data files found in {raw_data_dir}")
         return 0  # No files processed
 
-    # Extract timestamps from filenames using regex
-    timestamps = []
-    for file in raw_files:
-        match = re.search(rf"{re.escape(site_id)}_EC_(\d{{12}})_F10\.csv", file.name)
-        if match:
-            timestamp_str = match.group(1)
-            try:
-                timestamp = datetime.strptime(timestamp_str, "%Y%m%d%H%M")
-                timestamps.append(timestamp)
-            except ValueError:
-                logging.error(f"Invalid timestamp format in file: {file.name}")
-                continue  # Skip files with invalid timestamps
-
-    if not timestamps:
-        logging.warning(f"No valid timestamps found in {raw_data_dir}")
-        return 0
-
-    start_time, end_time = min(timestamps), max(timestamps)
-
-    # Read the template file content
+    # Read the template file using ConfigParser
+    config = configparser.ConfigParser()
+    config.optionxform = str  # Preserve case of keys
     try:
         with template_file.open("r") as file:
-            project_data = file.read()
+            config.read_file(file)
     except FileNotFoundError:
         logging.error(f"Template file not found: {template_file}")
         return 0
 
-    # Convert paths to POSIX format to avoid regex escape issues on Windows
-    proj_file_path = (output_dir / f"{site_id}_{year}.metadata").as_posix()
-    dyn_metadata_path = (output_dir / f"{site_id}_{year}_dynamic_metadata.txt").as_posix()
+    # Update [Project] section
+    section = 'Project'
+    if section in config:
+        current_datetime = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        config.set(section, 'creation_date', current_datetime)
+        config.set(section, 'last_change_date', current_datetime)
+        config.set(section, 'project_title', md['SITEID'])
+        config.set(section, 'project_id', md['SITEID'])
+    else:
+        logging.error(f"Section [Project] not found in template")
+        return 0
+
+    # Convert paths to POSIX format to avoid issues on Windows
+    proj_file_path = (output_dir / f"{md['SITEID']}.metadata").as_posix()
+    dyn_metadata_path = (output_dir / f"{md['SITEID']}_dynamic_metadata.txt").as_posix()
     out_path = output_dir.as_posix()
     data_path = raw_data_dir.as_posix()
 
-    # Define patterns and their replacements
-    replacements = {
-        r'proj_file\s*=.*': f'proj_file={proj_file_path}',
-        r'dyn_metadata_file\s*=.*': f'dyn_metadata_file={dyn_metadata_path}',
-        r'out_path\s*=.*': f'out_path={out_path}',
-        r'data_path\s*=.*': f'data_path={data_path}',
-        r'last_change_date\s*=.*': f'last_change_date={datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}',
-        r'project_id\s*=.*': f'project_id={site_id}',
-        r'project_title\s*=.*$': f'project_title={site_id}'
-    }
-
-    # Apply all replacements to the project data
-    for pattern, replacement in replacements.items():
-        project_data = re.sub(pattern, replacement, project_data, flags=re.MULTILINE)
+    # Update paths in relevant sections
+    config.set('Project', 'proj_file', proj_file_path)
+    config.set('Project', 'dyn_metadata_file', dyn_metadata_path)
+    config.set('Project', 'out_path', out_path)
+    config.set('RawProcess_General', 'data_path', data_path)
 
     # Ensure the output directory exists
     try:
@@ -315,44 +305,15 @@ def modify_project_file(
         logging.error(f"Failed to create output directory {output_dir}: {e}")
         return 0
 
-    # Write the modified project data to the project file
+    # Write the updated configuration back to the project file
     try:
-        with project_file.open("w") as file:
-            file.write(project_data)
-        logging.info(f"Modified project file written: {project_file}")
+        with project_file.open('w') as configfile:
+            config.write(configfile, space_around_delimiters=False)
+        logging.info(f"Project file written: {project_file}")
     except IOError as e:
-        logging.error(f"Failed to write to project file {project_file}: {e}")
+        logging.error(f"Failed to write project file {project_file}: {e}")
         return 0
 
-    # Paths to dynamic metadata and metadata template files
-    dynamic_metadata_src = template_file.parent / f"{site_id}_dynamic_metadata.ini"
-    metadata_template_src = template_file.parent / f"{site_id}_metadata_template.ini"
-
-    # Copy dynamic metadata file
-    try:
-        shutil.copyfile(dynamic_metadata_src, dyn_metadata_path)
-        logging.info(f"Copied dynamic metadata from {dynamic_metadata_src} to {dyn_metadata_path}")
-    except FileNotFoundError:
-        logging.error(f"Dynamic metadata file not found: {dynamic_metadata_src}")
-        return 0
-    except IOError as e:
-        logging.error(f"Failed to copy dynamic metadata file: {e}")
-        return 0
-
-    # Copy metadata template file
-    try:
-        shutil.copyfile(metadata_template_src, proj_file_path)
-        logging.info(f"Copied metadata template from {metadata_template_src} to {proj_file_path}")
-    except FileNotFoundError:
-        logging.error(f"Metadata template file not found: {metadata_template_src}")
-        return 0
-    except IOError as e:
-        logging.error(f"Failed to copy metadata template file: {e}")
-        return 0
-
-    logging.info(
-        f"Modified project file {project_file} with data period {start_time} to {end_time}"
-    )
     return len(raw_files)
 
 def run_subprocess(command: str, working_dir: Path) -> int:
@@ -505,6 +466,201 @@ def run_eddypro(
 
     logging.info(f"The results of EddyPro run are stored in {output_dir}")
 
+def get_md(path_ecmd, path_output, displacement_height=None, roughness_length=None):
+    """
+    Generate dynamic metadata and configuration files for EddyPro processing.
+
+    Parameters:
+        path_ecmd (str): Path to the ECMD CSV file.
+        path_output (str): Path to the output directory.
+        displacement_height (float): Displacement height for the site.
+        roughness_length (float): Roughness length for the site.
+    """
+    # Ensure the output directory exists
+    path_output = Path(path_output)
+    path_output.mkdir(parents=True, exist_ok=True)
+
+    # Read ECMD file
+    ecmd_file = pd.read_csv(path_ecmd)
+    md = ecmd_file.iloc[0]  # Use the first row for metadata
+
+    # Generate dynamic metadata
+    generate_dynamic_metadata(ecmd_file, path_output, md)
+
+    # Generate .metadata file
+    build_metadata_file(md, path_output, displacement_height, roughness_length)
+
+    logging.info("All files have been successfully created.")
+    return md
+
+def generate_dynamic_metadata(ecmd_file, path_output, md):
+    """
+    Generate dynamic metadata from ECMD file and save to output directory.
+
+    Args:
+        ecmd_file (pd.DataFrame): The ECMD data as a pandas DataFrame.
+        path_output (str): The path to the output directory.
+        md (pd.Series): The metadata series from the ECMD file.
+    """
+    date = ecmd_file['DATE_OF_VARIATION_EF'].astype(str)
+    date_formatted = date.str.slice(0, 4) + '-' + date.str.slice(4, 6) + '-' + date.str.slice(6, 8)
+    time_formatted = date.str.slice(8, 10) + ':' + date.str.slice(10, 12)
+
+    dyn_md_data = {
+        "date": date_formatted,
+        "time": time_formatted,
+        "file_length": ecmd_file['FILE_DURATION'],
+        "acquisition_frequency": ecmd_file['ACQUISITION_FREQUENCY'],
+        "canopy_height": ecmd_file['CANOPY_HEIGHT'],
+    }
+    dyn_md_data.update({
+        "master_sonic_manufacturer": ecmd_file['SA_MANUFACTURER'],
+        "master_sonic_model": ecmd_file['SA_MODEL'],
+        "master_sonic_height": ecmd_file['SA_HEIGHT'],
+        "master_sonic_wformat": ecmd_file['SA_WIND_DATA_FORMAT'],
+        "master_sonic_wref": ecmd_file['SA_NORTH_ALIGNEMENT'],
+        "master_sonic_north_offset": ecmd_file['SA_NORTH_OFFSET'],
+    })
+    dyn_md_data.update({
+        "co2_irga_manufacturer": ecmd_file['GA_MANUFACTURER'],
+        "co2_irga_model": ecmd_file['GA_MODEL'],
+        "co2_irga_northward_separation": ecmd_file['GA_NORTHWARD_SEPARATION'],
+        "co2_irga_eastward_separation": ecmd_file['GA_EASTWARD_SEPARATION'],
+    })
+    if md["GA_PATH"] == "closed":
+        dyn_md_data.update({
+        "co2_irga_tube_length": ecmd_file['GA_TUBE_LENGTH'],
+        "co2_irga_tube_diameter": ecmd_file['GA_TUBE_DIAMETER'],
+        "co2_irga_flowrate": ecmd_file['GA_FLOWRATE'],
+        })
+    dyn_md_data.update({
+        "h2o_irga_manufacturer": ecmd_file['GA_MANUFACTURER'],
+        "h2o_irga_model": ecmd_file['GA_MODEL'],
+        "h2o_irga_northward_separation": ecmd_file['GA_NORTHWARD_SEPARATION'],
+        "h2o_irga_eastward_separation": ecmd_file['GA_EASTWARD_SEPARATION'],
+    })
+    if md["GA_PATH"] == "closed":
+        dyn_md_data.update({
+        "h2o_irga_tube_length": ecmd_file['GA_TUBE_LENGTH'],
+        "h2o_irga_tube_diameter": ecmd_file['GA_TUBE_DIAMETER'],
+        "h2o_irga_flowrate": ecmd_file['GA_FLOWRATE'],
+        })
+
+    dyn_md = pd.DataFrame(dyn_md_data)
+    dyn_md.fillna("00:00", inplace=True)
+    dyn_md_file = os.path.join(path_output, f"{md['SITEID']}_dynamic_metadata.txt")
+    dyn_md.to_csv(dyn_md_file, index=False, sep=",")
+    logging.info(f"Dynamic metadata written to {dyn_md_file}")
+
+def build_metadata_file(md, path_output, displacement_height, roughness_length):
+    """
+    Generate a .metadata file for EddyPro processing using site-specific metadata.
+    """
+    ga_path = md["GA_PATH"]
+
+    # Determine columns based on GA_PATH
+    if ga_path == "closed":
+        columns = [
+            ("u", "UVW_UNITS"), ("v", "UVW_UNITS"), ("w", "UVW_UNITS"), ("ts", "T_SONIC_UNITS"),
+            ("anemometer_diagnostic", "dimensionless"), ("diag_72", "dimensionless"), 
+            ("co2", "CO2_UNITS"), ("h2o", "H2O_UNITS"), ("cell_t", "T_CELL_UNITS"),
+            ("int_t_1", "T_CELL_UNITS"), ("int_t_2", "T_CELL_UNITS"), ("int_p", "P_CELL_UNITS")
+        ]
+    elif ga_path == "open":
+        columns = [
+            ("u", "UVW_UNITS"), ("v", "UVW_UNITS"), ("w", "UVW_UNITS"), ("ts", "T_SONIC_UNITS"),
+            ("anemometer_diagnostic", "dimensionless"), ("diag_75", "dimensionless"),
+            ("co2", "CO2_UNITS"), ("h2o", "H2O_UNITS"), 
+        ]
+    else:
+        logging.error(f"Unsupported GA_PATH: {ga_path}")
+        return
+
+    # Read the metadata template using the correct file path
+    template_metadata_file = Path(__file__).resolve().parent.parent / "config" / "metadata_template.ini"
+
+    config = configparser.ConfigParser()
+    config.optionxform = str  # Preserve case sensitivity
+
+    # Check if the template file exists
+    if not template_metadata_file.is_file():
+        logging.error(f"Template metadata file not found: {template_metadata_file}")
+        return
+
+    # Read the template file
+    config.read(template_metadata_file)
+
+    # Check if 'FileDescription' section exists
+    if 'FileDescription' not in config.sections():
+        logging.error("Section [FileDescription] not found in the metadata template.")
+        return
+
+    # Update the config with values from md
+    h = 0  # Column index
+    for variable, unit_key in columns:
+        h +=1
+        section = 'FileDescription'
+        instrument = md["SA_MODEL"] if variable in ["u", "v", "w", "ts", "anemometer_diagnostic"] else md["GA_MODEL"]
+        unit = md.get(unit_key, "dimensionless")
+        measure_type = md.get(f"{variable.upper()}_measure_type", "")
+        config.set(section, f'col_{h}_a_value', '')
+        config.set(section, f'col_{h}_b_value', '')
+        config.set(section, f'col_{h}_conversion', '')
+        config.set(section, f'col_{h}_instrument', instrument)
+        config.set(section, f'col_{h}_max_timelag', '0.00')
+        config.set(section, f'col_{h}_max_value', '')
+        config.set(section, f'col_{h}_measure_type', measure_type)
+        config.set(section, f'col_{h}_min_timelag', '0.00')
+        config.set(section, f'col_{h}_min_value', '')
+        config.set(section, f'col_{h}_nom_timelag', '0.00')
+        config.set(section, f'col_{h}_unit_in', unit)
+        config.set(section, f'col_{h}_unit_out', '')
+        config.set(section, f'col_{h}_variable', variable)
+
+    # Update other sections as needed
+    config.set('FileDescription', 'header_rows', str(md.get('NROW_HEADER', 0)))
+    config.set('FileDescription', 'separator', md.get('SEPARATOR', ','))
+
+    # Update Instruments section with available metadata
+    config.set('Instruments', 'instr_1_height', str(md.get('SA_HEIGHT', '')))
+    config.set('Instruments', 'instr_1_manufacturer', md.get('SA_MANUFACTURER', ''))
+    config.set('Instruments', 'instr_1_model', md.get('SA_MODEL', ''))
+    config.set('Instruments', 'instr_1_wref', md.get('SA_NORTH_ALIGNEMENT', ''))
+    config.set('Instruments', 'instr_1_wformat', md.get('SA_WIND_DATA_FORMAT', ''))
+    config.set('Instruments', 'instr_1_north_offset', str(md.get('SA_NORTH_OFFSET', '')))
+    config.set('Instruments', 'instr_2_eastward_separation', str(md.get('GA_EASTWARD_SEPARATION', '')))
+    config.set('Instruments', 'instr_2_northward_separation', str(md.get('GA_NORTHWARD_SEPARATION', '')))
+    config.set('Instruments', 'instr_2_vertical_separation', str(md.get('GA_VERTICAL_SEPARATION', '')))
+    config.set('Instruments', 'instr_2_manufacturer', md.get('GA_MANUFACTURER', ''))
+    config.set('Instruments', 'instr_2_model', md.get('GA_MODEL', ''))
+    if ga_path == "closed":
+        config.set('Instruments', 'instr_2_tube_diameter', str(md.get('GA_TUBE_DIAMETER', '')))
+        config.set('Instruments', 'instr_2_tube_flowrate', str(md.get('GA_FLOWRATE', '')))
+        config.set('Instruments', 'instr_2_tube_length', str(md.get('GA_TUBE_LENGTH', '')))
+
+    config.set('Project', 'creation_date', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    config.set('Project', 'file_name', f"{md['SITEID']}.metadata")
+    config.set('Project', 'title', md['SITEID'])
+
+    config.set('Site', 'altitude', str(md.get('ALTITUDE', 0)))
+    config.set('Site', 'latitude', str(md.get('LATITUDE', 0)))
+    config.set('Site', 'longitude', str(md.get('LONGITUDE', 0)))
+    config.set('Site', 'canopy_height', str(md.get('CANOPY_HEIGHT', 0)))
+    config.set('Site', 'displacement_height', str(displacement_height if displacement_height else 0))
+    config.set('Site', 'roughness_length', str(roughness_length if roughness_length else 0))
+
+    config.set('Station', 'station_id', md['SITEID'])
+    config.set('Station', 'station', md['SITEID'])
+
+    config.set('Timing', 'acquisition_frequency', str(md['ACQUISITION_FREQUENCY']))
+
+    # Write the updated config to the metadata file
+    metadata_file = os.path.join(path_output, f"{md['SITEID']}.metadata")
+    with open(metadata_file, 'w') as configfile:
+        config.write(configfile, space_around_delimiters=False)
+
+    logging.info(f"Metadata file written to {metadata_file}")
+
 def process_year(args):
     """
     Process a single year for EddyPro batch processing.
@@ -518,6 +674,7 @@ def process_year(args):
             - eddypro_executable (Path)
             - stream_output (bool)
             - template_file (Path)
+            - path_ecmd (Path)
 
     Returns:
         int: Number of raw files processed for the year.
@@ -529,21 +686,33 @@ def process_year(args):
         output_dir_pattern,
         eddypro_executable,
         stream_output,
-        template_file
+        template_file,
+        path_ecmd
     ) = args
 
     raw_data_dir = Path(input_dir_pattern.format(year=year, site_id=site_id))
     output_dir = Path(output_dir_pattern.format(year=year, site_id=site_id))
     project_file = output_dir / f"{site_id}_{year}.eddypro"
 
-    # Modify the project file based on raw data and template
-    num_processed = modify_project_file(
+    # Format the ecmd_file path with the actual site_id
+    path_ecmd = Path(str(path_ecmd).format(site_id=site_id))
+
+    # Generate dynamic metadata and metadata files
+    md = get_md(
+        path_ecmd=path_ecmd,
+        path_output=output_dir,
+        displacement_height=None,
+        roughness_length=None
+    )
+
+    # Modify the project file based on raw data and generated metadata
+    num_processed = build_project_file(
         template_file=template_file,
         project_file=project_file,
         raw_data_dir=raw_data_dir,
         output_dir=output_dir,
         site_id=site_id,
-        year=year
+        md=md
     )
 
     if num_processed == 0:
@@ -642,6 +811,9 @@ def main():
 
     # Prepare arguments for each year
     template_file = Path(__file__).resolve().parent.parent / "config" / "EddyProProject_template.ini"
+    # Add path to ECMD file
+    path_ecmd = Path(config.get("ecmd_file", "data/GL-ZaF_ecmd.csv"))
+
     args_list = [
         (
             year,
@@ -650,7 +822,8 @@ def main():
             output_dir_pattern,
             eddypro_executable,
             stream_output,
-            template_file
+            template_file,
+            path_ecmd  # Pass ECMD file path to process_year
         )
         for year in years
     ]
