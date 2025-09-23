@@ -265,7 +265,8 @@ def build_project_file(
 
     # Read the template file using ConfigParser
     config = configparser.ConfigParser()
-    config.optionxform = str  # Preserve case of keys
+    # Preserve case of keys by overriding optionxform
+    config.optionxform = str  # type: ignore[assignment]
     try:
         with template_file.open("r") as file:
             config.read_file(file)
@@ -282,7 +283,7 @@ def build_project_file(
         config.set(section, 'project_title', md['SITEID'])
         config.set(section, 'project_id', md['SITEID'])
     else:
-        logging.error(f"Section [Project] not found in template")
+        logging.error("Section [Project] not found in template")
         return 0
 
     # Convert paths to POSIX format to avoid issues on Windows
@@ -345,8 +346,9 @@ def run_subprocess(command: str, working_dir: Path) -> int:
             cwd=working_dir
         )
         # Stream the output line by line as it becomes available
-        for line in process.stdout:
-            print(line, end='')  # Print to terminal without adding extra newline
+        if process.stdout:
+            for line in process.stdout:
+                print(line, end='')  # Print to terminal without adding extra newline
         process.wait()  # Wait for the subprocess to finish
         logging.debug(f"Subprocess finished with return code {process.returncode}")
         return process.returncode
@@ -580,7 +582,8 @@ def build_metadata_file(md, path_output, displacement_height, roughness_length):
     template_metadata_file = Path(__file__).resolve().parent.parent / "config" / "metadata_template.ini"
 
     config = configparser.ConfigParser()
-    config.optionxform = str  # Preserve case sensitivity
+    # Preserve case sensitivity by overriding optionxform
+    config.optionxform = str  # type: ignore[assignment]
 
     # Check if the template file exists
     if not template_metadata_file.is_file():
@@ -751,10 +754,24 @@ def main():
     validate_config(config)
 
     # Extract configuration parameters
-    eddypro_executable = Path(config.get("eddypro_executable"))
+    eddypro_executable_path = config.get("eddypro_executable")
+    if not eddypro_executable_path:
+        logging.error("eddypro_executable not specified in configuration")
+        return 1
+    eddypro_executable = Path(eddypro_executable_path)
+    
     site_id = config.get("site_id")
+    if not site_id:
+        logging.error("site_id not specified in configuration")
+        return 1
+        
     years = config.get("years_to_process", [])
+    
     input_dir_pattern = config.get("input_dir_pattern")
+    if not input_dir_pattern:
+        logging.error("input_dir_pattern not specified in configuration")
+        return 1
+        
     output_dir_pattern = config.get("output_dir_pattern")
     stream_output = config.get("stream_output", False)
     log_level = config.get("log_level", "INFO")  # Default to INFO if not specified
