@@ -119,3 +119,52 @@ This CSV file allows the batch processor to iterate through each project, apply 
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
+
+## Configuration Guide
+
+See `docs/config.md` for a structured description of configuration layers, environment overrides, dynamic metadata, and provenance settings.
+
+## Provenance
+
+After each successful run a `provenance.json` file is written under `data/processed/<SITE>/` capturing:
+
+- Git commit / branch / dirty flag
+- Effective (redacted) configuration hash
+- Python version and (optionally) environment packages
+- Start / end timestamps & duration
+- Counts of total vs processed raw files
+
+This enables reproducibility and auditability as mandated by the project Constitution.
+
+## Development Quality Tooling
+
+Pre-commit hooks (Ruff, Black, mypy, whitespace) are configured. To enable locally:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run all hooks manually:
+
+```bash
+pre-commit run --all-files
+```
+
+## Continuous Integration
+
+GitHub Actions workflow `.github/workflows/ci.yml` runs on push / PR:
+
+1. Installs dependencies
+2. Ruff lint & Black format check
+3. mypy (non-fatal currently)
+4. pytest
+
+## Next Improvements (Ideas)
+
+- Introduce JSON Schema validation for `config.yaml`
+- Add richer CLI interface (Typer) and progress UI
+- Multi-site batch orchestration
+
+---
+Refer to the Constitution for governance and quality standards before making substantial changes.
