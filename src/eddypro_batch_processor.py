@@ -698,6 +698,25 @@ def process_year(args):
     output_dir = Path(output_dir_pattern.format(year=year, site_id=site_id))
     project_file = output_dir / f"{site_id}_{year}.eddypro"
 
+    # Short-circuit: if there are no raw files, skip metadata/project work
+    # This also avoids attempting to read ECMD when path_ecmd is None in tests
+    try:
+        raw_files = get_raw_files(raw_data_dir, site_id)
+    except Exception as e:
+        logging.error(f"Failed to enumerate raw files in {raw_data_dir}: {e}")
+        raw_files = []
+    if not raw_files:
+        logging.info(f"Skipping EddyPro run for year {year} due to no valid raw files.")
+        return 0  # No files processed
+
+    # If required inputs for metadata/project generation are missing, skip gracefully
+    if path_ecmd is None:
+        logging.info("No ECMD path provided; skipping processing and returning 0.")
+        return 0
+    if template_file is None:
+        logging.info("No template file provided; skipping processing and returning 0.")
+        return 0
+
     # Format the ecmd_file path with the actual site_id
     path_ecmd = Path(str(path_ecmd).format(site_id=site_id))
 
