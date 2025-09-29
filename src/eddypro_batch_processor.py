@@ -79,6 +79,7 @@ import multiprocessing
 from multiprocessing import Pool
 from logging.handlers import RotatingFileHandler
 import pandas as pd
+from .provenance import RunContext, generate_provenance  # type: ignore
 
 def load_config(config_path: Path) -> dict:
     """
@@ -881,6 +882,33 @@ def main():
         f"Processed {processed_raw_files}/{total_raw_files} files. "
         f"Elapsed time: {elapsed_str}. Estimated time remaining: {remaining_str}."
     )
+
+    # Provenance capture (best-effort, non-fatal)
+    try:
+        # Derive processed_root (strip year placeholder if present)
+        if output_dir_pattern and '{year}' in output_dir_pattern:
+            base_part = output_dir_pattern.split('{year}')[0]
+            processed_root = Path(base_part.format(site_id=site_id)).parent.parent
+        else:
+            processed_root = Path(output_dir_pattern) if output_dir_pattern else Path('data/processed') / site_id
+        ctx = RunContext(
+            site_id=site_id,
+            years=years,
+            total_raw_files=total_raw_files,
+            processed_raw_files=processed_raw_files,
+            input_root=Path(input_dir_pattern.split('{year}')[0].format(site_id=site_id)),
+            processed_root=processed_root,
+            config=config,
+            redact_keys=["secret_token", "api_key"],
+            include_environment=True,
+            start_time=start_time,
+            end_time=time.time(),
+        )
+        # Use site/year independent directory for manifest (top-level processed_root)
+        manifest_path = generate_provenance(Path('data/processed') / site_id, ctx)
+        logging.info(f"Provenance manifest written: {manifest_path}")
+    except Exception as e:
+        logging.warning(f"Failed to write provenance manifest: {e}")
 
 if __name__ == "__main__":
     main()
