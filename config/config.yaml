@@ -12,7 +12,7 @@ site_id: GL-NuF
 
 # List of years you want to process for this site
 years_to_process:
-  
+
   #- 2000
   #- 2001
   #- 2002
@@ -66,5 +66,3 @@ stream_output: True  # Set to False to keep EddyPro output quiet
 
 # Control logging verbosity
 log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
-
-

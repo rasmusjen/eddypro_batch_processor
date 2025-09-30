@@ -1,0 +1,156 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eddypro-batch-processor"
+version = "0.1.0"
+description = "Automated EddyPro processing with scenario support and performance monitoring"
+authors = [{name = "Rasmus Jensen", email = "raje@ecos.au.dk"}]
+readme = "README.md"
+license = {text = "GNU GPLv3"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "psutil>=5.9.0",
+    "plotly>=5.0.0",
+    "tqdm>=4.64.0",
+    "pandas>=1.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+    "bandit[toml]>=1.7.0",
+    "types-PyYAML>=6.0.0",
+]
+jinja = [
+    "jinja2>=3.0.0",
+]
+
+[project.scripts]
+eddypro-batch = "eddypro_batch_processor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/rasmusjen/eddypro_batch_processor"
+Repository = "https://github.com/rasmusjen/eddypro_batch_processor"
+Issues = "https://github.com/rasmusjen/eddypro_batch_processor/issues"
+
+# Package discovery configuration for hatchling
+[tool.hatch.build.targets.wheel]
+packages = ["src/eddypro_batch_processor"]
+
+# Tool configurations following copilot-instructions.md
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+skip-string-normalization = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "TRY", "PL"]
+ignore = [
+    "TRY003",  # Allow custom exception messages
+    "PLR0913", # Allow many function arguments (common in scientific code)
+    "PLR2004", # Allow magic values in non-test code (scientific constants)
+    "PLR0912", # Allow many branches (legacy code)
+    "PLR0915", # Allow many statements (legacy code)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR2004", "TRY301"]  # Magic values and bare except OK in tests
+"src/eddypro_batch_processor/cli.py" = ["PLR0912", "PLR0915"]  # Allow complex CLI logic
+"src/eddypro_batch_processor.py" = ["ALL"]  # Legacy script - exclude from linting during transition
+
+[tool.ruff.lint.isort]
+known-first-party = ["eddypro_batch_processor"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Gradual typing as per instructions
+check_untyped_defs = true
+show_error_codes = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "plotly.*",
+    "psutil.*",
+    "pandas.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=src/eddypro_batch_processor",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--strict-markers",
+    "--disable-warnings",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "tests/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/site-packages/*",
+]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+precision = 2
+skip_covered = false
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist"]
+skips = ["B101", "B601"]  # Skip assert_used and shell=True (needed for subprocess)

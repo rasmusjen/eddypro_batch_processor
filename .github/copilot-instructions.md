@@ -12,11 +12,11 @@
 - Working baseline: `src/eddypro_batch_processor.py` is currently functional and must be treated as the starting point. Refactors should preserve existing behavior and outputs unless explicitly approved.
 
 ## Code Quality
-- Enforce **black (88)**, **ruff** (F,E,W,I,N,PL,UP,B), strict type hints; keep **mypy/pyright clean**.
+- Enforce **black (88)**, **ruff** (E,F,W,I,N,UP,B,SIM,TRY,PL), strict type hints; keep **mypy/pyright clean**.
 - Public APIs get NumPy/Google-style docstrings (Args/Returns/Raises/Examples).
 
 ## Testing
-- Every change adds/updates **pytest** tests; keep **≥90% core coverage** (document allowed gaps).
+- Every change adds/updates **pytest** tests; target **≥90% core coverage** (start at 70% floor, improve over time; document allowed gaps).
 - Use **Hypothesis** where parsing/transform correctness benefits; keep **golden files** tiny in `tests/data/expected`.
 - Tests must be **deterministic** (seed RNG; no wall-clock or machine-path coupling).
 
@@ -30,11 +30,13 @@
 - Single-pass where possible; minimize re-reads; batch writes.
 - Parallelism: **process-based** for CPU-bound; **do not over-subscribe**; workers are configurable.
 - Emit **structured logs** (run_id, step, file, chunk_idx, rows, duration_ms). One log per run.
-- Provide **progress** (tqdm) and optional **light profiling** (CPU/IO/peak RAM). 
+- Provide **progress** (tqdm) and optional **light profiling** (CPU/IO/peak RAM).
 - Each run writes a **manifest** (config hash, git SHA, start/end, metrics, outputs).
+- **Dependencies**: psutil (monitoring), plotly (charts, with fallbacks), optional jinja2 (templates).
 
 ## Config & CLI
-- Single source of truth: **`configs/default.toml`**; CLI overrides are explicit.
+- Single source of truth: **`config/config.yaml`**; CLI overrides are explicit.
+- CLI tool: **`eddypro-batch`** with subcommands (run, scenarios, validate, status).
 - No hard-coded paths. Keep unit conversions at edges; internal units are canonical.
 
 ## Git & CI

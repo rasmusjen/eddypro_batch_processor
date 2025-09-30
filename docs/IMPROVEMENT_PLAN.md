@@ -271,14 +271,14 @@ Acceptance criteria
 Milestone 1: Repo scaffolding and quality guardrails
 
 - Tasks
-  - Add `pyproject.toml` with package metadata and console entry `eddypro-batch`
-  - Add `.editorconfig`, `ruff` + `black` config (via pyproject), `.pre-commit-config.yaml`
-  - Add CI workflow `.github/workflows/ci.yml` (lint, type-check, tests)
+  - [x] Add `pyproject.toml` with package metadata and console entry `eddypro-batch`
+  - [x] Add `.editorconfig`, `ruff` + `black` config (via pyproject), `.pre-commit-config.yaml`
+  - [x] Add CI workflow `.github/workflows/ci.yml` (lint, type-check, tests)
 - Deliverables
-  - Files above committed; pre-commit enabled; CI workflow present
+  - [x] Files above committed; pre-commit enabled; CI workflow present
 - Definition of Done
-  - Local pre-commit runs pass on a sample change
-  - CI pipeline passes on a branch with no code changes
+  - [x] Local pre-commit runs pass on a sample change
+  - [x] CI pipeline passes on a branch with no code changes
 
 Milestone 2: CLI skeleton and package structure
 
