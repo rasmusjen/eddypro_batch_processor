@@ -1,4 +1,5 @@
 """Tests for CLI command functions."""
+
 # ruff: noqa: SIM117 - Nested with statements are readable in test context
 
 import argparse
