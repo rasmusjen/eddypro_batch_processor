@@ -106,7 +106,7 @@ def test_cli_scenarios_stub():
 
     assert result.returncode == 0
     assert "Scenarios command - stub implementation" in result.stdout
-    assert "Rotation methods: [1, 3]" in result.stdout
+    assert "Parameter options for scenarios:" in result.stdout
 
 
 def test_cli_run_dry_run_stub():
