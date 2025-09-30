@@ -19,6 +19,7 @@ class TestEddyProBatchProcessor(unittest.TestCase):
             None,  # eddypro_executable (mocked or None)
             False,  # stream_output
             None,  # template_file (mocked or None)
+            None,  # path_ecmd (mocked or None)
         )
         result = process_year(args)
         self.assertEqual(result, 0)
