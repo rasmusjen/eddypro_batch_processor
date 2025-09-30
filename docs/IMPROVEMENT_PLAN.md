@@ -294,13 +294,13 @@ Milestone 2: CLI skeleton and package structure
 Milestone 3: INI parameterization utilities
 
 - Tasks
-  - Implement `ini_tools.py` to patch: `rot_meth`, `tlag_meth`, `detrend_meth`, `despike_vm`
-  - Enforce validation policy (allowed sets; abort on invalid)
-  - Integrate overrides into `run` command flow
+  - [x] Implement `ini_tools.py` to patch: `rot_meth`, `tlag_meth`, `detrend_meth`, `despike_vm`
+  - [x] Enforce validation policy (allowed sets; abort on invalid)
+  - [x] Integrate overrides into `run` command flow
 - Deliverables
-  - Unit tests covering valid/invalid overrides and correct INI patching
+  - [x] Unit tests covering valid/invalid overrides and correct INI patching
 - Definition of Done
-  - Tests pass; patched `.eddypro` files contain expected values
+  - [x] Tests pass; patched `.eddypro` files contain expected values
 
 Milestone 4: Performance monitoring module
 
