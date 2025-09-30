@@ -19,8 +19,8 @@ data/raw/
 data/processed/
 
 # Configuration files with secrets
-config/*.ini
-config/*.yaml
+#config/*.ini
+#config/*.yaml
 
 # OS-specific files
 .DS_Store
