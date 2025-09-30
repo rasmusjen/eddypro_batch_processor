@@ -28,6 +28,10 @@ class TestCLICommandFunctions:
             site=None,
             years=None,
             dry_run=False,
+            rot_meth=None,
+            tlag_meth=None,
+            detrend_meth=None,
+            despike_vm=None,
         )
 
         with patch("eddypro_batch_processor.cli.logging") as mock_logging:
@@ -48,6 +52,10 @@ class TestCLICommandFunctions:
             site="TEST-SITE",
             years=None,
             dry_run=False,
+            rot_meth=None,
+            tlag_meth=None,
+            detrend_meth=None,
+            despike_vm=None,
         )
 
         with patch("eddypro_batch_processor.cli.logging") as mock_logging:
@@ -64,6 +72,10 @@ class TestCLICommandFunctions:
             site=None,
             years=[2021, 2022],
             dry_run=False,
+            rot_meth=None,
+            tlag_meth=None,
+            detrend_meth=None,
+            despike_vm=None,
         )
 
         with patch("eddypro_batch_processor.cli.logging") as mock_logging:
@@ -80,6 +92,10 @@ class TestCLICommandFunctions:
             site=None,
             years=None,
             dry_run=True,
+            rot_meth=None,
+            tlag_meth=None,
+            detrend_meth=None,
+            despike_vm=None,
         )
 
         with patch("eddypro_batch_processor.cli.logging") as mock_logging:
@@ -120,10 +136,11 @@ class TestCLICommandFunctions:
 
             assert result == 0
             call_args = [call[0][0] for call in mock_logging.info.call_args_list]
-            assert "Rotation methods: [1, 3]" in call_args
-            assert "Time lag methods: [2, 4]" in call_args
-            assert "Detrend methods: [0, 1]" in call_args
-            assert "Despike methods: [0, 1]" in call_args
+            assert "Starting scenario matrix processing..." in call_args
+            assert any(
+                msg.startswith("Parameter options for scenarios:") for msg in call_args
+            )
+            assert "Scenarios command - stub implementation" in call_args
 
     def test_cmd_validate_basic(self):
         """Test the cmd_validate function with basic arguments."""

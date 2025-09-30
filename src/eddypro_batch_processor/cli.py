@@ -11,6 +11,8 @@ import logging
 import sys
 from pathlib import Path
 
+from . import ini_tools
+
 
 def setup_logging(log_level: str = "INFO") -> None:
     """Set up console logging with the specified level."""
@@ -94,6 +96,32 @@ Examples:
         help="Generate files without executing EddyPro",
     )
 
+    # INI parameter overrides for run command
+    run_parser.add_argument(
+        "--rot-meth",
+        type=int,
+        choices=[1, 3],
+        help="Rotation method override (1=DR, 3=PF)",
+    )
+    run_parser.add_argument(
+        "--tlag-meth",
+        type=int,
+        choices=[2, 4],
+        help="Time lag method override (2=CMD, 4=AO)",
+    )
+    run_parser.add_argument(
+        "--detrend-meth",
+        type=int,
+        choices=[0, 1],
+        help="Detrend method override (0=BA, 1=LD)",
+    )
+    run_parser.add_argument(
+        "--despike-vm",
+        type=int,
+        choices=[0, 1],
+        help="Spike removal method override (0=VM97, 1=M13)",
+    )
+
     # Scenarios command
     scenarios_parser = subparsers.add_parser(
         "scenarios", help="Run Cartesian product of supplied INI parameter values"
@@ -163,6 +191,27 @@ def cmd_run(args: argparse.Namespace) -> int:
     """Execute the run command."""
     logging.info("Starting EddyPro batch processing run...")
 
+    # Collect INI parameter overrides
+    ini_parameters = {}
+    if args.rot_meth is not None:
+        ini_parameters["rot_meth"] = args.rot_meth
+    if args.tlag_meth is not None:
+        ini_parameters["tlag_meth"] = args.tlag_meth
+    if args.detrend_meth is not None:
+        ini_parameters["detrend_meth"] = args.detrend_meth
+    if args.despike_vm is not None:
+        ini_parameters["despike_vm"] = args.despike_vm
+
+    # Validate INI parameters if any provided
+    if ini_parameters:
+        try:
+            validated_params = ini_tools.validate_parameters(ini_parameters)
+            logging.info(f"INI parameter overrides: {validated_params}")
+        except ini_tools.INIParameterError as e:
+            # Use error instead of exception to avoid stack trace for user input errors
+            logging.error(f"Invalid INI parameter: {e}")  # noqa: TRY400
+            return 1
+
     # TODO: Implement run logic using EddyProBatchProcessor
     logging.info("Run command - stub implementation")
     logging.info(f"Config: {args.config}")
@@ -180,16 +229,32 @@ def cmd_scenarios(args: argparse.Namespace) -> int:
     """Execute the scenarios command."""
     logging.info("Starting scenario matrix processing...")
 
+    # Collect parameter options for Cartesian product
+    parameter_options = {}
+    if args.rot_meth:
+        parameter_options["rot_meth"] = args.rot_meth
+    if args.tlag_meth:
+        parameter_options["tlag_meth"] = args.tlag_meth
+    if args.detrend_meth:
+        parameter_options["detrend_meth"] = args.detrend_meth
+    if args.despike_vm:
+        parameter_options["despike_vm"] = args.despike_vm
+
+    # Validate each parameter value in the options
+    if parameter_options:
+        try:
+            for param_name, values in parameter_options.items():
+                for value in values:
+                    ini_tools.validate_parameter(param_name, value)
+            logging.info(f"Parameter options for scenarios: {parameter_options}")
+        except ini_tools.INIParameterError as e:
+            # Use error instead of exception to avoid stack trace for user input errors
+            logging.error(f"Invalid scenario parameter: {e}")  # noqa: TRY400
+            return 1
+
+    # TODO: Calculate Cartesian product and check scenario limit
     # TODO: Implement scenario logic
     logging.info("Scenarios command - stub implementation")
-    if args.rot_meth:
-        logging.info(f"Rotation methods: {args.rot_meth}")
-    if args.tlag_meth:
-        logging.info(f"Time lag methods: {args.tlag_meth}")
-    if args.detrend_meth:
-        logging.info(f"Detrend methods: {args.detrend_meth}")
-    if args.despike_vm:
-        logging.info(f"Despike methods: {args.despike_vm}")
 
     return 0
 
