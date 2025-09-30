@@ -5,7 +5,7 @@ from pathlib import Path
 # Add src to path so we can import the module directly
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import eddypro_batch_processor  # noqa: E402
+from eddypro_batch_processor import process_year  # noqa: E402
 
 
 class TestEddyProBatchProcessor(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestEddyProBatchProcessor(unittest.TestCase):
             False,  # stream_output
             None,  # template_file (mocked or None)
         )
-        result = eddypro_batch_processor.process_year(args)
+        result = process_year(args)
         self.assertEqual(result, 0)
 
     # Add more test cases as needed
