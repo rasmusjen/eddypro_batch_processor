@@ -137,7 +137,9 @@ class TestCLICommandFunctions:
             assert result == 0
             call_args = [call[0][0] for call in mock_logging.info.call_args_list]
             assert "Starting scenario matrix processing..." in call_args
-            assert "Parameter options for scenarios:" in call_args
+            assert any(
+                msg.startswith("Parameter options for scenarios:") for msg in call_args
+            )
             assert "Scenarios command - stub implementation" in call_args
 
     def test_cmd_validate_basic(self):
