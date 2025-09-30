@@ -4,28 +4,14 @@
 EddyPro Batch Processor Package
 
 This package provides functionality to automate and manage EddyPro processing tasks.
+Currently under development - refactoring from monolithic script to modular package.
 """
 
-from .eddypro_batch_processor import (
-    load_config,
-    validate_config,
-    setup_logging,
-    get_raw_files,
-    modify_project_file,
-    run_subprocess,
-    run_eddypro,
-    process_year,
-    main
-)
+from typing import List
 
-__all__ = [
-    "load_config",
-    "validate_config",
-    "setup_logging",
-    "get_raw_files",
-    "modify_project_file",
-    "run_subprocess",
-    "run_eddypro",
-    "process_year",
-    "main"
+# Re-export key functions will be implemented during Milestone 2-3
+# For now, keeping this minimal to avoid import errors during transition
+
+__all__: List[str] = [
+    # Will be populated as modules are refactored
 ]

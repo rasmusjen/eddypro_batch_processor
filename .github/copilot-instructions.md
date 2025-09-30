@@ -30,7 +30,7 @@
 - Single-pass where possible; minimize re-reads; batch writes.
 - Parallelism: **process-based** for CPU-bound; **do not over-subscribe**; workers are configurable.
 - Emit **structured logs** (run_id, step, file, chunk_idx, rows, duration_ms). One log per run.
-- Provide **progress** (tqdm) and optional **light profiling** (CPU/IO/peak RAM). 
+- Provide **progress** (tqdm) and optional **light profiling** (CPU/IO/peak RAM).
 - Each run writes a **manifest** (config hash, git SHA, start/end, metrics, outputs).
 - **Dependencies**: psutil (monitoring), plotly (charts, with fallbacks), optional jinja2 (templates).
 

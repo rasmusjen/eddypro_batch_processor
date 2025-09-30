@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """
 eddypro_batch_processor.py
@@ -34,70 +33,72 @@ Requirements:
 
 Example `config.yaml`:
     # Configuration for EddyPro processing job
-    
+
     # Specify the path to the EddyPro executable
     eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
-    
+
     # Specify the site ID you want to process
     site_id: GL-ZaF
-    
+
     # List of years you want to process for this site
     years_to_process:
       - 2021
       - 2022
       - 2023
-    
+
     # Input directory pattern for each year and site
     # Use `{year}` and `{site_id}` as placeholders
     input_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/raw/{site_id}/{year}"
-    
+
     # Output directory pattern for each year and site
     # Use `{year}` and `{site_id}` as placeholders
     output_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/processed/{site_id}/{year}/eddypro/processing"
-    
+
     # Enable or disable multiprocessing
     multiprocessing: False
-    
+
     # Control output streaming
     stream_output: True  # Set to False to keep the output quiet
 """
 
-import os
-import yaml
-import subprocess
-import logging
-import re
-from datetime import datetime, timedelta
-import shutil
-import platform
-from pathlib import Path
-import sys
-import time
 import argparse
 import configparser
+import logging
 import multiprocessing
-from multiprocessing import Pool
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
+from multiprocessing import Pool
+from pathlib import Path
+
 import pandas as pd
+import yaml
+
 
 def load_config(config_path: Path) -> dict:
     """
     Load the YAML configuration file.
 
     This function attempts to read and parse a YAML configuration file from the specified path.
-    It handles scenarios where the file is missing or contains invalid YAML syntax by logging 
+    It handles scenarios where the file is missing or contains invalid YAML syntax by logging
     appropriate error messages and exiting the script.
 
     Args:
-        config_path (Path): 
+        config_path (Path):
             The file system path to the YAML configuration file.
 
     Returns:
-        dict: 
+        dict:
             A dictionary containing configuration parameters loaded from the YAML file.
 
     Raises:
-        SystemExit: 
+        SystemExit:
             If the configuration file is not found or contains invalid YAML.
     """
     try:
@@ -111,6 +112,7 @@ def load_config(config_path: Path) -> dict:
     except yaml.YAMLError as e:
         logging.error(f"Error parsing the configuration file: {e}")
         sys.exit(1)
+
 
 def validate_config(config: dict) -> None:
     """
@@ -135,7 +137,7 @@ def validate_config(config: dict) -> None:
         "stream_output",
         "log_level",
         "multiprocessing",
-        "max_processes"
+        "max_processes",
     ]
     missing_keys = [key for key in required_keys if key not in config]
     if missing_keys:
@@ -148,14 +150,15 @@ def validate_config(config: dict) -> None:
         logging.error("Invalid 'max_processes' value. It must be a positive integer.")
         sys.exit(1)
 
+
 def setup_logging(log_level: str) -> None:
     """
     Configure logging with handlers for both file and console outputs.
 
     Args:
-        log_level (str): 
+        log_level (str):
             The logging level for console output (e.g., DEBUG, INFO).
-    
+
     Returns:
         None
     """
@@ -167,11 +170,11 @@ def setup_logging(log_level: str) -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     # Rotating File handler for detailed logs
-    file_handler = RotatingFileHandler(logs_dir / "eddypro_processing.log", maxBytes=5*1024*1024, backupCount=5)
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(message)s"
+    file_handler = RotatingFileHandler(
+        logs_dir / "eddypro_processing.log", maxBytes=5 * 1024 * 1024, backupCount=5
     )
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(file_formatter)
 
     # Console handler for specified log level
@@ -181,11 +184,11 @@ def setup_logging(log_level: str) -> None:
         console_level = getattr(logging, log_level.upper())
     except AttributeError:
         console_level = logging.INFO  # Default to INFO if invalid level
-        logging.warning(f"Invalid log level '{log_level}' specified. Falling back to INFO.")
+        logging.warning(
+            f"Invalid log level '{log_level}' specified. Falling back to INFO."
+        )
     console_handler.setLevel(console_level)
-    console_formatter = logging.Formatter(
-        "%(levelname)s - %(message)s"
-    )
+    console_formatter = logging.Formatter("%(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
 
     # Clear existing handlers to prevent duplicate logs
@@ -196,6 +199,7 @@ def setup_logging(log_level: str) -> None:
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
+
 def get_raw_files(raw_data_dir: Path, site_id: str) -> list:
     """
     Retrieve a list of raw data files matching the specific naming pattern.
@@ -205,24 +209,26 @@ def get_raw_files(raw_data_dir: Path, site_id: str) -> list:
     only files (not directories) are included in the returned list.
 
     Args:
-        raw_data_dir (Path): 
+        raw_data_dir (Path):
             The directory containing raw data files to be processed.
-        site_id (str): 
+        site_id (str):
             The identifier for the site, used to construct the filename pattern.
 
     Returns:
-        list: 
+        list:
             A list of Path objects representing the raw data files that match the pattern.
     """
     # Compile regex pattern for efficiency
     pattern = re.compile(rf"{re.escape(site_id)}_EC_\d{{12}}_F10\.csv")
     # List comprehension to filter files matching the pattern
     matching_files = [
-        file for file in raw_data_dir.iterdir()
+        file
+        for file in raw_data_dir.iterdir()
         if file.is_file() and pattern.match(file.name)
     ]
     logging.debug(f"Found {len(matching_files)} raw files in {raw_data_dir}")
     return matching_files
+
 
 def build_project_file(
     template_file: Path,
@@ -230,7 +236,7 @@ def build_project_file(
     raw_data_dir: Path,
     output_dir: Path,
     site_id: str,
-    md: pd.Series
+    md: pd.Series,
 ) -> int:
     """
     Build the EddyPro project file based on template and metadata.
@@ -274,15 +280,15 @@ def build_project_file(
         return 0
 
     # Update [Project] section
-    section = 'Project'
+    section = "Project"
     if section in config:
-        current_datetime = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-        config.set(section, 'creation_date', current_datetime)
-        config.set(section, 'last_change_date', current_datetime)
-        config.set(section, 'project_title', md['SITEID'])
-        config.set(section, 'project_id', md['SITEID'])
+        current_datetime = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        config.set(section, "creation_date", current_datetime)
+        config.set(section, "last_change_date", current_datetime)
+        config.set(section, "project_title", md["SITEID"])
+        config.set(section, "project_id", md["SITEID"])
     else:
-        logging.error(f"Section [Project] not found in template")
+        logging.error("Section [Project] not found in template")
         return 0
 
     # Convert paths to POSIX format to avoid issues on Windows
@@ -292,10 +298,10 @@ def build_project_file(
     data_path = raw_data_dir.as_posix()
 
     # Update paths in relevant sections
-    config.set('Project', 'proj_file', proj_file_path)
-    config.set('Project', 'dyn_metadata_file', dyn_metadata_path)
-    config.set('Project', 'out_path', out_path)
-    config.set('RawProcess_General', 'data_path', data_path)
+    config.set("Project", "proj_file", proj_file_path)
+    config.set("Project", "dyn_metadata_file", dyn_metadata_path)
+    config.set("Project", "out_path", out_path)
+    config.set("RawProcess_General", "data_path", data_path)
 
     # Ensure the output directory exists
     try:
@@ -307,14 +313,15 @@ def build_project_file(
 
     # Write the updated configuration back to the project file
     try:
-        with project_file.open('w') as configfile:
+        with project_file.open("w") as configfile:
             config.write(configfile, space_around_delimiters=False)
         logging.info(f"Project file written: {project_file}")
-    except IOError as e:
+    except OSError as e:
         logging.error(f"Failed to write project file {project_file}: {e}")
         return 0
 
     return len(raw_files)
+
 
 def run_subprocess(command: str, working_dir: Path) -> int:
     """
@@ -325,13 +332,13 @@ def run_subprocess(command: str, working_dir: Path) -> int:
     logging errors and returning a non-zero code.
 
     Args:
-        command (str): 
+        command (str):
             The command line string to be executed in the subprocess.
-        working_dir (Path): 
+        working_dir (Path):
             The directory in which to execute the subprocess command.
 
     Returns:
-        int: 
+        int:
             The return code of the subprocess. Returns -1 if an exception occurs.
     """
     try:
@@ -342,11 +349,11 @@ def run_subprocess(command: str, working_dir: Path) -> int:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            cwd=working_dir
+            cwd=working_dir,
         )
         # Stream the output line by line as it becomes available
         for line in process.stdout:
-            print(line, end='')  # Print to terminal without adding extra newline
+            print(line, end="")  # Print to terminal without adding extra newline
         process.wait()  # Wait for the subprocess to finish
         logging.debug(f"Subprocess finished with return code {process.returncode}")
         return process.returncode
@@ -354,10 +361,9 @@ def run_subprocess(command: str, working_dir: Path) -> int:
         logging.error(f"Failed to execute command '{command}': {e}")
         return -1
 
+
 def run_eddypro(
-    project_file: Path,
-    eddypro_executable: Path,
-    stream_output: bool
+    project_file: Path, eddypro_executable: Path, stream_output: bool
 ) -> None:
     """
     Run EddyPro processing using the specified project file.
@@ -374,10 +380,10 @@ def run_eddypro(
 
     # Copy EddyPro binaries to the bin directory
     try:
-        shutil.copytree(
-            eddypro_executable.parent, bin_dir, dirs_exist_ok=True
+        shutil.copytree(eddypro_executable.parent, bin_dir, dirs_exist_ok=True)
+        logging.info(
+            f"Copied EddyPro binaries from {eddypro_executable.parent} to {bin_dir}"
         )
-        logging.info(f"Copied EddyPro binaries from {eddypro_executable.parent} to {bin_dir}")
     except Exception as e:
         logging.error(f"Failed to copy EddyPro binaries: {e}")
         return
@@ -422,7 +428,8 @@ def run_eddypro(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=eddypro_path
+                cwd=eddypro_path,
+                check=False,
             )
             if rp_result.returncode != 0:
                 logging.error(f"Error running eddypro_rp:\n{rp_result.stderr}")
@@ -447,7 +454,8 @@ def run_eddypro(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=eddypro_path
+                cwd=eddypro_path,
+                check=False,
             )
             if fcc_result.returncode != 0:
                 logging.error(f"Error running eddypro_fcc:\n{fcc_result.stderr}")
@@ -465,6 +473,7 @@ def run_eddypro(
         logging.warning(f"Failed to clean up temporary directories: {e}")
 
     logging.info(f"The results of EddyPro run are stored in {output_dir}")
+
 
 def get_md(path_ecmd, path_output, displacement_height=None, roughness_length=None):
     """
@@ -493,6 +502,7 @@ def get_md(path_ecmd, path_output, displacement_height=None, roughness_length=No
     logging.info("All files have been successfully created.")
     return md
 
+
 def generate_dynamic_metadata(ecmd_file, path_output, md):
     """
     Generate dynamic metadata from ECMD file and save to output directory.
@@ -502,55 +512,68 @@ def generate_dynamic_metadata(ecmd_file, path_output, md):
         path_output (str): The path to the output directory.
         md (pd.Series): The metadata series from the ECMD file.
     """
-    date = ecmd_file['DATE_OF_VARIATION_EF'].astype(str)
-    date_formatted = date.str.slice(0, 4) + '-' + date.str.slice(4, 6) + '-' + date.str.slice(6, 8)
-    time_formatted = date.str.slice(8, 10) + ':' + date.str.slice(10, 12)
+    date = ecmd_file["DATE_OF_VARIATION_EF"].astype(str)
+    date_formatted = (
+        date.str.slice(0, 4) + "-" + date.str.slice(4, 6) + "-" + date.str.slice(6, 8)
+    )
+    time_formatted = date.str.slice(8, 10) + ":" + date.str.slice(10, 12)
 
     dyn_md_data = {
         "date": date_formatted,
         "time": time_formatted,
-        "file_length": ecmd_file['FILE_DURATION'],
-        "acquisition_frequency": ecmd_file['ACQUISITION_FREQUENCY'],
-        "canopy_height": ecmd_file['CANOPY_HEIGHT'],
+        "file_length": ecmd_file["FILE_DURATION"],
+        "acquisition_frequency": ecmd_file["ACQUISITION_FREQUENCY"],
+        "canopy_height": ecmd_file["CANOPY_HEIGHT"],
     }
-    dyn_md_data.update({
-        "master_sonic_manufacturer": ecmd_file['SA_MANUFACTURER'],
-        "master_sonic_model": ecmd_file['SA_MODEL'],
-        "master_sonic_height": ecmd_file['SA_HEIGHT'],
-        "master_sonic_wformat": ecmd_file['SA_WIND_DATA_FORMAT'],
-        "master_sonic_wref": ecmd_file['SA_NORTH_ALIGNEMENT'],
-        "master_sonic_north_offset": ecmd_file['SA_NORTH_OFFSET'],
-    })
-    dyn_md_data.update({
-        "co2_irga_manufacturer": ecmd_file['GA_MANUFACTURER'],
-        "co2_irga_model": ecmd_file['GA_MODEL'],
-        "co2_irga_northward_separation": ecmd_file['GA_NORTHWARD_SEPARATION'],
-        "co2_irga_eastward_separation": ecmd_file['GA_EASTWARD_SEPARATION'],
-    })
+    dyn_md_data.update(
+        {
+            "master_sonic_manufacturer": ecmd_file["SA_MANUFACTURER"],
+            "master_sonic_model": ecmd_file["SA_MODEL"],
+            "master_sonic_height": ecmd_file["SA_HEIGHT"],
+            "master_sonic_wformat": ecmd_file["SA_WIND_DATA_FORMAT"],
+            "master_sonic_wref": ecmd_file["SA_NORTH_ALIGNEMENT"],
+            "master_sonic_north_offset": ecmd_file["SA_NORTH_OFFSET"],
+        }
+    )
+    dyn_md_data.update(
+        {
+            "co2_irga_manufacturer": ecmd_file["GA_MANUFACTURER"],
+            "co2_irga_model": ecmd_file["GA_MODEL"],
+            "co2_irga_northward_separation": ecmd_file["GA_NORTHWARD_SEPARATION"],
+            "co2_irga_eastward_separation": ecmd_file["GA_EASTWARD_SEPARATION"],
+        }
+    )
     if md["GA_PATH"] == "closed":
-        dyn_md_data.update({
-        "co2_irga_tube_length": ecmd_file['GA_TUBE_LENGTH'],
-        "co2_irga_tube_diameter": ecmd_file['GA_TUBE_DIAMETER'],
-        "co2_irga_flowrate": ecmd_file['GA_FLOWRATE'],
-        })
-    dyn_md_data.update({
-        "h2o_irga_manufacturer": ecmd_file['GA_MANUFACTURER'],
-        "h2o_irga_model": ecmd_file['GA_MODEL'],
-        "h2o_irga_northward_separation": ecmd_file['GA_NORTHWARD_SEPARATION'],
-        "h2o_irga_eastward_separation": ecmd_file['GA_EASTWARD_SEPARATION'],
-    })
+        dyn_md_data.update(
+            {
+                "co2_irga_tube_length": ecmd_file["GA_TUBE_LENGTH"],
+                "co2_irga_tube_diameter": ecmd_file["GA_TUBE_DIAMETER"],
+                "co2_irga_flowrate": ecmd_file["GA_FLOWRATE"],
+            }
+        )
+    dyn_md_data.update(
+        {
+            "h2o_irga_manufacturer": ecmd_file["GA_MANUFACTURER"],
+            "h2o_irga_model": ecmd_file["GA_MODEL"],
+            "h2o_irga_northward_separation": ecmd_file["GA_NORTHWARD_SEPARATION"],
+            "h2o_irga_eastward_separation": ecmd_file["GA_EASTWARD_SEPARATION"],
+        }
+    )
     if md["GA_PATH"] == "closed":
-        dyn_md_data.update({
-        "h2o_irga_tube_length": ecmd_file['GA_TUBE_LENGTH'],
-        "h2o_irga_tube_diameter": ecmd_file['GA_TUBE_DIAMETER'],
-        "h2o_irga_flowrate": ecmd_file['GA_FLOWRATE'],
-        })
+        dyn_md_data.update(
+            {
+                "h2o_irga_tube_length": ecmd_file["GA_TUBE_LENGTH"],
+                "h2o_irga_tube_diameter": ecmd_file["GA_TUBE_DIAMETER"],
+                "h2o_irga_flowrate": ecmd_file["GA_FLOWRATE"],
+            }
+        )
 
     dyn_md = pd.DataFrame(dyn_md_data)
     dyn_md.fillna("00:00", inplace=True)
     dyn_md_file = os.path.join(path_output, f"{md['SITEID']}_dynamic_metadata.txt")
     dyn_md.to_csv(dyn_md_file, index=False, sep=",")
     logging.info(f"Dynamic metadata written to {dyn_md_file}")
+
 
 def build_metadata_file(md, path_output, displacement_height, roughness_length):
     """
@@ -561,23 +584,38 @@ def build_metadata_file(md, path_output, displacement_height, roughness_length):
     # Determine columns based on GA_PATH
     if ga_path == "closed":
         columns = [
-            ("u", "UVW_UNITS"), ("v", "UVW_UNITS"), ("w", "UVW_UNITS"), ("ts", "T_SONIC_UNITS"),
-            ("anemometer_diagnostic", "dimensionless"), ("diag_72", "dimensionless"), 
-            ("co2", "CO2_UNITS"), ("h2o", "H2O_UNITS"), ("cell_t", "T_CELL_UNITS"),
-            ("int_t_1", "T_CELL_UNITS"), ("int_t_2", "T_CELL_UNITS"), ("int_p", "P_CELL_UNITS")
+            ("u", "UVW_UNITS"),
+            ("v", "UVW_UNITS"),
+            ("w", "UVW_UNITS"),
+            ("ts", "T_SONIC_UNITS"),
+            ("anemometer_diagnostic", "dimensionless"),
+            ("diag_72", "dimensionless"),
+            ("co2", "CO2_UNITS"),
+            ("h2o", "H2O_UNITS"),
+            ("cell_t", "T_CELL_UNITS"),
+            ("int_t_1", "T_CELL_UNITS"),
+            ("int_t_2", "T_CELL_UNITS"),
+            ("int_p", "P_CELL_UNITS"),
         ]
     elif ga_path == "open":
         columns = [
-            ("u", "UVW_UNITS"), ("v", "UVW_UNITS"), ("w", "UVW_UNITS"), ("ts", "T_SONIC_UNITS"),
-            ("anemometer_diagnostic", "dimensionless"), ("diag_75", "dimensionless"),
-            ("co2", "CO2_UNITS"), ("h2o", "H2O_UNITS"), 
+            ("u", "UVW_UNITS"),
+            ("v", "UVW_UNITS"),
+            ("w", "UVW_UNITS"),
+            ("ts", "T_SONIC_UNITS"),
+            ("anemometer_diagnostic", "dimensionless"),
+            ("diag_75", "dimensionless"),
+            ("co2", "CO2_UNITS"),
+            ("h2o", "H2O_UNITS"),
         ]
     else:
         logging.error(f"Unsupported GA_PATH: {ga_path}")
         return
 
     # Read the metadata template using the correct file path
-    template_metadata_file = Path(__file__).resolve().parent.parent / "config" / "metadata_template.ini"
+    template_metadata_file = (
+        Path(__file__).resolve().parent.parent / "config" / "metadata_template.ini"
+    )
 
     config = configparser.ConfigParser()
     config.optionxform = str  # Preserve case sensitivity
@@ -591,75 +629,106 @@ def build_metadata_file(md, path_output, displacement_height, roughness_length):
     config.read(template_metadata_file)
 
     # Check if 'FileDescription' section exists
-    if 'FileDescription' not in config.sections():
+    if "FileDescription" not in config.sections():
         logging.error("Section [FileDescription] not found in the metadata template.")
         return
 
     # Update the config with values from md
     h = 0  # Column index
     for variable, unit_key in columns:
-        h +=1
-        section = 'FileDescription'
-        instrument = md["SA_MODEL"] if variable in ["u", "v", "w", "ts", "anemometer_diagnostic"] else md["GA_MODEL"]
+        h += 1
+        section = "FileDescription"
+        instrument = (
+            md["SA_MODEL"]
+            if variable in ["u", "v", "w", "ts", "anemometer_diagnostic"]
+            else md["GA_MODEL"]
+        )
         unit = md.get(unit_key, "dimensionless")
         measure_type = md.get(f"{variable.upper()}_measure_type", "")
-        config.set(section, f'col_{h}_a_value', '')
-        config.set(section, f'col_{h}_b_value', '')
-        config.set(section, f'col_{h}_conversion', '')
-        config.set(section, f'col_{h}_instrument', instrument)
-        config.set(section, f'col_{h}_max_timelag', '0.00')
-        config.set(section, f'col_{h}_max_value', '')
-        config.set(section, f'col_{h}_measure_type', measure_type)
-        config.set(section, f'col_{h}_min_timelag', '0.00')
-        config.set(section, f'col_{h}_min_value', '')
-        config.set(section, f'col_{h}_nom_timelag', '0.00')
-        config.set(section, f'col_{h}_unit_in', unit)
-        config.set(section, f'col_{h}_unit_out', '')
-        config.set(section, f'col_{h}_variable', variable)
+        config.set(section, f"col_{h}_a_value", "")
+        config.set(section, f"col_{h}_b_value", "")
+        config.set(section, f"col_{h}_conversion", "")
+        config.set(section, f"col_{h}_instrument", instrument)
+        config.set(section, f"col_{h}_max_timelag", "0.00")
+        config.set(section, f"col_{h}_max_value", "")
+        config.set(section, f"col_{h}_measure_type", measure_type)
+        config.set(section, f"col_{h}_min_timelag", "0.00")
+        config.set(section, f"col_{h}_min_value", "")
+        config.set(section, f"col_{h}_nom_timelag", "0.00")
+        config.set(section, f"col_{h}_unit_in", unit)
+        config.set(section, f"col_{h}_unit_out", "")
+        config.set(section, f"col_{h}_variable", variable)
 
     # Update other sections as needed
-    config.set('FileDescription', 'header_rows', str(md.get('NROW_HEADER', 0)))
-    config.set('FileDescription', 'separator', md.get('SEPARATOR', ','))
+    config.set("FileDescription", "header_rows", str(md.get("NROW_HEADER", 0)))
+    config.set("FileDescription", "separator", md.get("SEPARATOR", ","))
 
     # Update Instruments section with available metadata
-    config.set('Instruments', 'instr_1_height', str(md.get('SA_HEIGHT', '')))
-    config.set('Instruments', 'instr_1_manufacturer', md.get('SA_MANUFACTURER', ''))
-    config.set('Instruments', 'instr_1_model', md.get('SA_MODEL', ''))
-    config.set('Instruments', 'instr_1_wref', md.get('SA_NORTH_ALIGNEMENT', ''))
-    config.set('Instruments', 'instr_1_wformat', md.get('SA_WIND_DATA_FORMAT', ''))
-    config.set('Instruments', 'instr_1_north_offset', str(md.get('SA_NORTH_OFFSET', '')))
-    config.set('Instruments', 'instr_2_eastward_separation', str(md.get('GA_EASTWARD_SEPARATION', '')))
-    config.set('Instruments', 'instr_2_northward_separation', str(md.get('GA_NORTHWARD_SEPARATION', '')))
-    config.set('Instruments', 'instr_2_vertical_separation', str(md.get('GA_VERTICAL_SEPARATION', '')))
-    config.set('Instruments', 'instr_2_manufacturer', md.get('GA_MANUFACTURER', ''))
-    config.set('Instruments', 'instr_2_model', md.get('GA_MODEL', ''))
+    config.set("Instruments", "instr_1_height", str(md.get("SA_HEIGHT", "")))
+    config.set("Instruments", "instr_1_manufacturer", md.get("SA_MANUFACTURER", ""))
+    config.set("Instruments", "instr_1_model", md.get("SA_MODEL", ""))
+    config.set("Instruments", "instr_1_wref", md.get("SA_NORTH_ALIGNEMENT", ""))
+    config.set("Instruments", "instr_1_wformat", md.get("SA_WIND_DATA_FORMAT", ""))
+    config.set(
+        "Instruments", "instr_1_north_offset", str(md.get("SA_NORTH_OFFSET", ""))
+    )
+    config.set(
+        "Instruments",
+        "instr_2_eastward_separation",
+        str(md.get("GA_EASTWARD_SEPARATION", "")),
+    )
+    config.set(
+        "Instruments",
+        "instr_2_northward_separation",
+        str(md.get("GA_NORTHWARD_SEPARATION", "")),
+    )
+    config.set(
+        "Instruments",
+        "instr_2_vertical_separation",
+        str(md.get("GA_VERTICAL_SEPARATION", "")),
+    )
+    config.set("Instruments", "instr_2_manufacturer", md.get("GA_MANUFACTURER", ""))
+    config.set("Instruments", "instr_2_model", md.get("GA_MODEL", ""))
     if ga_path == "closed":
-        config.set('Instruments', 'instr_2_tube_diameter', str(md.get('GA_TUBE_DIAMETER', '')))
-        config.set('Instruments', 'instr_2_tube_flowrate', str(md.get('GA_FLOWRATE', '')))
-        config.set('Instruments', 'instr_2_tube_length', str(md.get('GA_TUBE_LENGTH', '')))
+        config.set(
+            "Instruments", "instr_2_tube_diameter", str(md.get("GA_TUBE_DIAMETER", ""))
+        )
+        config.set(
+            "Instruments", "instr_2_tube_flowrate", str(md.get("GA_FLOWRATE", ""))
+        )
+        config.set(
+            "Instruments", "instr_2_tube_length", str(md.get("GA_TUBE_LENGTH", ""))
+        )
 
-    config.set('Project', 'creation_date', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    config.set('Project', 'file_name', f"{md['SITEID']}.metadata")
-    config.set('Project', 'title', md['SITEID'])
+    config.set("Project", "creation_date", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    config.set("Project", "file_name", f"{md['SITEID']}.metadata")
+    config.set("Project", "title", md["SITEID"])
 
-    config.set('Site', 'altitude', str(md.get('ALTITUDE', 0)))
-    config.set('Site', 'latitude', str(md.get('LATITUDE', 0)))
-    config.set('Site', 'longitude', str(md.get('LONGITUDE', 0)))
-    config.set('Site', 'canopy_height', str(md.get('CANOPY_HEIGHT', 0)))
-    config.set('Site', 'displacement_height', str(displacement_height if displacement_height else 0))
-    config.set('Site', 'roughness_length', str(roughness_length if roughness_length else 0))
+    config.set("Site", "altitude", str(md.get("ALTITUDE", 0)))
+    config.set("Site", "latitude", str(md.get("LATITUDE", 0)))
+    config.set("Site", "longitude", str(md.get("LONGITUDE", 0)))
+    config.set("Site", "canopy_height", str(md.get("CANOPY_HEIGHT", 0)))
+    config.set(
+        "Site",
+        "displacement_height",
+        str(displacement_height if displacement_height else 0),
+    )
+    config.set(
+        "Site", "roughness_length", str(roughness_length if roughness_length else 0)
+    )
 
-    config.set('Station', 'station_id', md['SITEID'])
-    config.set('Station', 'station', md['SITEID'])
+    config.set("Station", "station_id", md["SITEID"])
+    config.set("Station", "station", md["SITEID"])
 
-    config.set('Timing', 'acquisition_frequency', str(md['ACQUISITION_FREQUENCY']))
+    config.set("Timing", "acquisition_frequency", str(md["ACQUISITION_FREQUENCY"]))
 
     # Write the updated config to the metadata file
     metadata_file = os.path.join(path_output, f"{md['SITEID']}.metadata")
-    with open(metadata_file, 'w') as configfile:
+    with open(metadata_file, "w") as configfile:
         config.write(configfile, space_around_delimiters=False)
 
     logging.info(f"Metadata file written to {metadata_file}")
+
 
 def process_year(args):
     """
@@ -687,7 +756,7 @@ def process_year(args):
         eddypro_executable,
         stream_output,
         template_file,
-        path_ecmd
+        path_ecmd,
     ) = args
 
     raw_data_dir = Path(input_dir_pattern.format(year=year, site_id=site_id))
@@ -702,7 +771,7 @@ def process_year(args):
         path_ecmd=path_ecmd,
         path_output=output_dir,
         displacement_height=None,
-        roughness_length=None
+        roughness_length=None,
     )
 
     # Modify the project file based on raw data and generated metadata
@@ -712,7 +781,7 @@ def process_year(args):
         raw_data_dir=raw_data_dir,
         output_dir=output_dir,
         site_id=site_id,
-        md=md
+        md=md,
     )
 
     if num_processed == 0:
@@ -723,10 +792,11 @@ def process_year(args):
     run_eddypro(
         project_file=project_file,
         eddypro_executable=eddypro_executable,
-        stream_output=stream_output
+        stream_output=stream_output,
     )
 
     return num_processed
+
 
 def main():
     """
@@ -738,7 +808,7 @@ def main():
         "--config",
         type=str,
         default="config/config.yaml",
-        help="Path to the configuration YAML file."
+        help="Path to the configuration YAML file.",
     )
     args = parser.parse_args()
 
@@ -759,7 +829,9 @@ def main():
     stream_output = config.get("stream_output", False)
     log_level = config.get("log_level", "INFO")  # Default to INFO if not specified
     use_multiprocessing = config.get("multiprocessing", False)  # New parameter
-    max_processes = config.get("max_processes", multiprocessing.cpu_count())  # New parameter
+    max_processes = config.get(
+        "max_processes", multiprocessing.cpu_count()
+    )  # New parameter
 
     # Ensure max_processes does not exceed available CPU cores
     available_cpus = multiprocessing.cpu_count()
@@ -810,7 +882,11 @@ def main():
     start_time = time.time()
 
     # Prepare arguments for each year
-    template_file = Path(__file__).resolve().parent.parent / "config" / "EddyProProject_template.ini"
+    template_file = (
+        Path(__file__).resolve().parent.parent
+        / "config"
+        / "EddyProProject_template.ini"
+    )
     # Add path to ECMD file
     path_ecmd = Path(config.get("ecmd_file", "data/GL-ZaF_ecmd.csv"))
 
@@ -823,7 +899,7 @@ def main():
             eddypro_executable,
             stream_output,
             template_file,
-            path_ecmd  # Pass ECMD file path to process_year
+            path_ecmd,  # Pass ECMD file path to process_year
         )
         for year in years
     ]
@@ -856,7 +932,8 @@ def main():
     elapsed_str = str(timedelta(seconds=int(elapsed_time)))
     remaining_str = (
         str(timedelta(seconds=int(estimated_remaining_time)))
-        if estimated_remaining_time > 0 else "00:00:00"
+        if estimated_remaining_time > 0
+        else "00:00:00"
     )
 
     # Log the final progress of processing
@@ -864,6 +941,7 @@ def main():
         f"Processed {processed_raw_files}/{total_raw_files} files. "
         f"Elapsed time: {elapsed_str}. Estimated time remaining: {remaining_str}."
     )
+
 
 if __name__ == "__main__":
     main()

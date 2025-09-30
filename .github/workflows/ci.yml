@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .[dev]
+
+    - name: Run ruff linting
+      run: ruff check . --output-format=github
+
+    - name: Run ruff formatting check
+      run: ruff format --check .
+
+    - name: Run black formatting check
+      run: black --check --diff .
+
+    - name: Run mypy type checking
+      run: mypy src/ --ignore-missing-imports
+      continue-on-error: true  # Gradual typing per instructions
+
+    - name: Run bandit security checks
+      run: bandit -r src/ -f json -o bandit-report.json || true
+
+    - name: Upload bandit results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: bandit-report-${{ matrix.python-version }}
+        path: bandit-report.json
+
+    - name: Run tests with coverage
+      run: pytest --cov-fail-under=70
+
+    - name: Upload coverage reports
+      if: matrix.python-version == '3.11'
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: |
+          htmlcov/
+          coverage.xml
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: .coverage
+
+  # Security scan job (separate for clarity)
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install bandit
+      run: pip install bandit[toml]
+
+    - name: Run bandit security scan
+      run: bandit -r src/ -ll -f json -o bandit-results.json
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-results
+        path: bandit-results.json
