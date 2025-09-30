@@ -8,8 +8,12 @@ from unittest.mock import patch
 # Add src to path so we can import the module directly
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from eddypro_batch_processor import process_year  # noqa: E402
+# Import the original standalone module
+import eddypro_batch_processor  # noqa: E402
 from eddypro_batch_processor.cli import main  # noqa: E402
+
+# Get process_year from the original module
+process_year = eddypro_batch_processor.process_year
 
 
 class TestCLI(unittest.TestCase):
