@@ -283,13 +283,13 @@ Milestone 1: Repo scaffolding and quality guardrails
 Milestone 2: CLI skeleton and package structure
 
 - Tasks
-  - Create package layout: `src/eddypro_batch_processor/{__init__.py,cli.py,core.py}`
-  - Implement `cli.py` with subcommands: `run`, `scenarios`, `validate`, `status` (stubs acceptable)
-  - Wire `--log-level`, `--config` and ensure help/usage is clear
+  - [x] Create package layout: `src/eddypro_batch_processor/{__init__.py,cli.py,core.py}`
+  - [x] Implement `cli.py` with subcommands: `run`, `scenarios`, `validate`, `status` (stubs acceptable)
+  - [x] Wire `--log-level`, `--config` and ensure help/usage is clear
 - Deliverables
-  - `eddypro-batch --help` shows subcommands and options
+  - [x] `eddypro-batch --help` shows subcommands and options
 - Definition of Done
-  - Unit test: invoking CLI with `--help` returns zero and prints usage
+  - [x] Unit test: invoking CLI with `--help` returns zero and prints usage
 
 Milestone 3: INI parameterization utilities
 
