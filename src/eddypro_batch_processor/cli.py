@@ -95,6 +95,12 @@ Examples:
         action="store_true",
         help="Generate files without executing EddyPro",
     )
+    run_parser.add_argument(
+        "--metrics-interval",
+        type=float,
+        default=0.5,
+        help="Performance monitoring sampling interval in seconds (default: 0.5)",
+    )
 
     # INI parameter overrides for run command
     run_parser.add_argument(
@@ -163,6 +169,12 @@ Examples:
     scenarios_parser.add_argument("--site", type=str, help="Site ID to process")
     scenarios_parser.add_argument(
         "--years", nargs="+", type=int, help="Years to process"
+    )
+    scenarios_parser.add_argument(
+        "--metrics-interval",
+        type=float,
+        default=0.5,
+        help="Performance monitoring sampling interval in seconds (default: 0.5)",
     )
 
     # Validate command
