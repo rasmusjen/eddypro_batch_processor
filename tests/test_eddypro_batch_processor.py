@@ -1,3 +1,4 @@
+import importlib.util
 import shutil
 import sys
 import tempfile
@@ -5,25 +6,45 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-# Add src to path so we can import the module directly
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from eddypro_batch_processor import process_year  # noqa: E402
+# Load the legacy module directly by file path to avoid conflicts with the new package
+def load_legacy_module():
+    """Load the legacy standalone script as a module."""
+    script_path = Path(__file__).parent.parent / "src" / "eddypro_batch_processor.py"
+    spec = importlib.util.spec_from_file_location("legacy_eddypro", script_path)
+    if spec is not None and spec.loader is not None:
+        legacy_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(legacy_module)
+        return legacy_module
+    else:
+        raise ImportError("Could not load legacy module")
+
+
+# Load legacy module and extract process_year function
+legacy_module = load_legacy_module()
+process_year = legacy_module.process_year
+
+# Add src to path for the CLI import
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from eddypro_batch_processor.cli import main  # noqa: E402
 
 
 class TestCLI(unittest.TestCase):
+    @patch("sys.argv", ["eddypro-batch", "--help"])
     def test_main_function(self):
-        """Test that the CLI main function works and returns 0."""
-        result = main()
-        self.assertEqual(result, 0)
+        """Test that the CLI main function works and shows help."""
+        with self.assertRaises(SystemExit) as cm:
+            main()
+        # Help should exit with code 0
+        self.assertEqual(cm.exception.code, 0)
 
+    @patch("sys.argv", ["eddypro-batch", "validate", "--help"])
     def test_main_script_execution(self):
-        """Test that the CLI can be executed as a script."""
-        # Simply test that we can import and run the main function
-        # The __main__ block is harder to test reliably without side effects
-        result = main()
-        self.assertEqual(result, 0)
+        """Test that the CLI can be executed with validate subcommand help."""
+        with self.assertRaises(SystemExit) as cm:
+            main()
+        # Help should exit with code 0
+        self.assertEqual(cm.exception.code, 0)
 
 
 class TestEddyProBatchProcessor(unittest.TestCase):
