@@ -305,13 +305,13 @@ Milestone 3: INI parameterization utilities
 Milestone 4: Performance monitoring module
 
 - Tasks
-  - Implement `monitor.py` sampling every 0.5s (configurable) using `psutil`
-  - Record CPU%, RSS, IO read/write bytes; write `metrics.csv` and a summary JSON
-  - Start/stop monitor around EddyPro subprocess execution
+  - [x] Implement `monitor.py` sampling every 0.5s (configurable) using `psutil`
+  - [x] Record CPU%, RSS, IO read/write bytes; write `metrics.csv` and a summary JSON
+  - [x] Start/stop monitor around EddyPro subprocess execution
 - Deliverables
-  - Unit tests with a fake workload verify sampling and output files
+  - [x] Unit tests with a fake workload verify sampling and output files
 - Definition of Done
-  - Metrics artifacts created and hold plausible values in a local test
+  - [x] Metrics artifacts created and hold plausible values in a local test
 
 Milestone 5: Reporting (manifest + HTML)
 
