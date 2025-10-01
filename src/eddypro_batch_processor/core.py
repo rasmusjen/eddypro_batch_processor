@@ -5,16 +5,19 @@ Contains the core business logic refactored from the original eddypro_batch_proc
 while preserving existing behavior and outputs.
 """
 
+import json
 import logging
 import platform
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
 
+from . import report
 from .monitor import MonitoredOperation
 
 
@@ -88,6 +91,8 @@ class EddyProBatchProcessor:
             "multiprocessing",
             "max_processes",
             "metrics_interval_seconds",
+            "reports_dir",
+            "report_charts",
         ]
         missing_keys = [key for key in required_keys if key not in config]
         if missing_keys:
@@ -110,6 +115,14 @@ class EddyProBatchProcessor:
             logging.error(
                 "Invalid 'metrics_interval_seconds' value. "
                 "It must be a positive number."
+            )
+            sys.exit(1)
+
+        # Validate report_charts
+        report_charts = config.get("report_charts", "plotly")
+        if report_charts not in ["plotly", "svg", "none"]:
+            logging.error(
+                "Invalid 'report_charts' value. " "Must be one of: plotly, svg, none."
             )
             sys.exit(1)
 
@@ -301,6 +314,109 @@ def validate_config(config: dict) -> None:
     """Legacy function wrapper for backwards compatibility."""
     processor = EddyProBatchProcessor()
     processor.validate_config(config)
+
+
+def generate_run_report(
+    config: Dict[str, Any],
+    site_id: str,
+    years_processed: list,
+    output_base_dir: Path,
+    start_time: datetime,
+    end_time: datetime,
+    overall_success: bool = True,
+) -> None:
+    """
+    Generate run manifest and HTML report after processing completes.
+
+    Args:
+        config: Configuration dictionary
+        site_id: Site identifier
+        years_processed: List of years that were processed
+        output_base_dir: Base output directory (parent of year-specific dirs)
+        start_time: Processing start time (datetime)
+        end_time: Processing end time (datetime)
+        overall_success: Whether all processing succeeded
+    """
+    # Determine reports directory
+    reports_dir_config = config.get("reports_dir")
+    if reports_dir_config:
+        reports_dir = Path(reports_dir_config)
+    else:
+        # Default: put reports in the output_base_dir/reports
+        reports_dir = output_base_dir / "reports"
+
+    reports_dir = report.create_reports_directory(reports_dir.parent, reports_dir.name)
+
+    # Generate run ID
+    run_id = f"{site_id}_{start_time.strftime('%Y%m%d_%H%M%S')}"
+
+    # Collect output directories
+    output_dirs = []
+    for year in years_processed:
+        year_dir = Path(
+            config.get("output_dir_pattern", "").format(year=year, site_id=site_id)
+        )
+        if year_dir.exists():
+            output_dirs.append(year_dir)
+
+    # Compute config checksum (simple hash of sorted config JSON)
+    config_checksum = str(hash(json.dumps(config, sort_keys=True)))
+
+    # Collect scenarios (single baseline scenario for now)
+    scenarios = [
+        {
+            "scenario_name": "baseline",
+            "scenario_params": {},
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "duration_seconds": (end_time - start_time).total_seconds(),
+            "success": overall_success,
+        }
+    ]
+
+    # Load metrics if available
+    scenario_metrics = {}
+    for year in years_processed:
+        year_dir = Path(
+            config.get("output_dir_pattern", "").format(year=year, site_id=site_id)
+        )
+        metrics_files = list(year_dir.glob("metrics_*.csv"))
+        if metrics_files:
+            # Load the most recent metrics file
+            metrics_file = sorted(metrics_files)[-1]
+            metrics = report.load_metrics_from_csv(metrics_file)
+            scenario_metrics[f"{year}_baseline"] = metrics
+
+    # Generate run manifest
+    run_manifest = report.generate_run_manifest(
+        run_id=run_id,
+        config=config,
+        config_checksum=config_checksum,
+        site_id=site_id,
+        years_processed=years_processed,
+        scenarios=scenarios,
+        start_time=start_time,
+        end_time=end_time,
+        overall_success=overall_success,
+        output_dirs=output_dirs,
+    )
+
+    # Write run manifest
+    manifest_path = reports_dir / "run_manifest.json"
+    report.write_run_manifest(run_manifest, manifest_path)
+
+    # Generate HTML report
+    chart_engine = config.get("report_charts", "plotly")
+    html_path = reports_dir / "run_report.html"
+    report.generate_html_report(
+        run_manifest=run_manifest,
+        scenario_metrics=scenario_metrics if scenario_metrics else None,
+        chart_engine=chart_engine,
+        output_path=html_path,
+    )
+
+    logging.info(f"Run report generated: {html_path}")
+    logging.info(f"Run manifest generated: {manifest_path}")
 
 
 # TODO: Add remaining functions from eddypro_batch_processor.py
