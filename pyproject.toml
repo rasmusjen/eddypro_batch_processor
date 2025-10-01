@@ -153,4 +153,4 @@ skip_covered = false
 
 [tool.bandit]
 exclude_dirs = ["tests", "build", "dist"]
-skips = ["B101", "B601"]  # Skip assert_used and shell=True (needed for subprocess)
+skips = ["B101", "B404", "B601"]  # Skip assert_used, subprocess_import, shell=True

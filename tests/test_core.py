@@ -92,6 +92,7 @@ class TestEddyProBatchProcessor:
             "log_level": "INFO",
             "multiprocessing": False,
             "max_processes": 2,
+            "metrics_interval_seconds": 0.5,
         }
 
         processor = EddyProBatchProcessor()
@@ -142,6 +143,7 @@ class TestEddyProBatchProcessor:
             "log_level": "INFO",
             "multiprocessing": False,
             "max_processes": 1,
+            "metrics_interval_seconds": 0.5,
         }
 
         processor = EddyProBatchProcessor()
@@ -191,6 +193,7 @@ class TestLegacyFunctions:
             "log_level": "DEBUG",
             "multiprocessing": True,
             "max_processes": 4,
+            "metrics_interval_seconds": 0.5,
         }
 
         # Should not raise an exception

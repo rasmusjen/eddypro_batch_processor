@@ -66,3 +66,6 @@ stream_output: True  # Set to False to keep EddyPro output quiet
 
 # Control logging verbosity
 log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Performance monitoring configuration
+metrics_interval_seconds: 0.5  # Sampling interval for performance monitoring
