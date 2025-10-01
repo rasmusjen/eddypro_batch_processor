@@ -93,6 +93,8 @@ class TestEddyProBatchProcessor:
             "multiprocessing": False,
             "max_processes": 2,
             "metrics_interval_seconds": 0.5,
+            "reports_dir": None,
+            "report_charts": "plotly",
         }
 
         processor = EddyProBatchProcessor()
@@ -144,6 +146,8 @@ class TestEddyProBatchProcessor:
             "multiprocessing": False,
             "max_processes": 1,
             "metrics_interval_seconds": 0.5,
+            "reports_dir": None,
+            "report_charts": "plotly",
         }
 
         processor = EddyProBatchProcessor()
@@ -194,6 +198,8 @@ class TestLegacyFunctions:
             "multiprocessing": True,
             "max_processes": 4,
             "metrics_interval_seconds": 0.5,
+            "reports_dir": None,
+            "report_charts": "plotly",
         }
 
         # Should not raise an exception

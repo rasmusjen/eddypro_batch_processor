@@ -880,6 +880,7 @@ def main():
 
     processed_raw_files = 0
     start_time = time.time()
+    start_time_dt = datetime.now()
 
     # Prepare arguments for each year
     template_file = (
@@ -922,6 +923,7 @@ def main():
 
     # Calculate total elapsed time
     elapsed_time = time.time() - start_time
+    end_time_dt = datetime.now()
 
     # Estimate remaining time (if applicable)
     progress = processed_raw_files / total_raw_files
@@ -941,6 +943,32 @@ def main():
         f"Processed {processed_raw_files}/{total_raw_files} files. "
         f"Elapsed time: {elapsed_str}. Estimated time remaining: {remaining_str}."
     )
+
+    # Generate run report and manifest
+    try:
+        from eddypro_batch_processor.core import generate_run_report
+
+        # Determine output base directory (parent of year-specific dirs)
+        first_year = years[0] if years else 2021
+        first_output_dir = Path(
+            output_dir_pattern.format(year=first_year, site_id=site_id)
+        )
+        output_base_dir = first_output_dir.parent.parent  # Go up to site level
+
+        overall_success = processed_raw_files > 0
+
+        generate_run_report(
+            config=config,
+            site_id=site_id,
+            years_processed=years,
+            output_base_dir=output_base_dir,
+            start_time=start_time_dt,
+            end_time=end_time_dt,
+            overall_success=overall_success,
+        )
+    except Exception as e:
+        logging.warning(f"Failed to generate run report: {e}")
+        logging.debug("Report generation error", exc_info=True)
 
 
 if __name__ == "__main__":

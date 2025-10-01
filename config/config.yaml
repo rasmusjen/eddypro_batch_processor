@@ -69,3 +69,7 @@ log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # Performance monitoring configuration
 metrics_interval_seconds: 0.5  # Sampling interval for performance monitoring
+
+# Reporting configuration
+reports_dir: null  # Optional: Custom reports directory (default: {output_dir}/reports)
+report_charts: plotly  # Chart engine: plotly, svg, or none (default: plotly)

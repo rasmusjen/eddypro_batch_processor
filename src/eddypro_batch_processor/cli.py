@@ -101,6 +101,17 @@ Examples:
         default=0.5,
         help="Performance monitoring sampling interval in seconds (default: 0.5)",
     )
+    run_parser.add_argument(
+        "--reports-dir",
+        type=str,
+        help="Custom reports directory (default: {output_dir}/reports)",
+    )
+    run_parser.add_argument(
+        "--report-charts",
+        choices=["plotly", "svg", "none"],
+        default="plotly",
+        help="Chart engine for reports (default: plotly)",
+    )
 
     # INI parameter overrides for run command
     run_parser.add_argument(
