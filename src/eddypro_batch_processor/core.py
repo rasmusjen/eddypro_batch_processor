@@ -13,12 +13,13 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
-from . import report
+from . import ini_tools, report
 from .monitor import MonitoredOperation
+from .scenarios import Scenario
 
 
 class EddyProBatchProcessor:
@@ -363,7 +364,7 @@ def generate_run_report(
     config_checksum = str(hash(json.dumps(config, sort_keys=True)))
 
     # Collect scenarios (single baseline scenario for now)
-    scenarios = [
+    scenario_list = [
         {
             "scenario_name": "baseline",
             "scenario_params": {},
@@ -394,7 +395,7 @@ def generate_run_report(
         config_checksum=config_checksum,
         site_id=site_id,
         years_processed=years_processed,
-        scenarios=scenarios,
+        scenarios=scenario_list,
         start_time=start_time,
         end_time=end_time,
         overall_success=overall_success,
@@ -417,6 +418,174 @@ def generate_run_report(
 
     logging.info(f"Run report generated: {html_path}")
     logging.info(f"Run manifest generated: {manifest_path}")
+
+
+def run_single_scenario(
+    scenario: Scenario,
+    template_path: Path,
+    output_base_dir: Path,
+    eddypro_executable: Path,
+    stream_output: bool,
+    metrics_interval: float,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """
+    Execute a single scenario with patched parameters.
+
+    Args:
+        scenario: Scenario object with parameters and suffix
+        template_path: Path to EddyPro project template
+        output_base_dir: Base directory for scenario outputs
+        eddypro_executable: Path to EddyPro executable
+        stream_output: Whether to stream subprocess output
+        metrics_interval: Performance monitoring sampling interval
+        dry_run: If True, only create files without running EddyPro
+
+    Returns:
+        Dictionary containing scenario execution metadata
+    """
+    start_time = datetime.now()
+
+    # Create scenario-specific output directory
+    scenario_output_dir = output_base_dir / f"scenario{scenario.suffix}"
+    scenario_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create patched project file with scenario suffix
+    project_filename = template_path.stem + scenario.suffix + template_path.suffix
+    scenario_project_file = scenario_output_dir / project_filename
+
+    logging.info(
+        f"Scenario {scenario.index}: Creating project file with parameters "
+        f"{scenario.parameters}"
+    )
+
+    try:
+        # Create patched INI file
+        ini_tools.create_patched_ini(
+            template_path=template_path,
+            output_path=scenario_project_file,
+            parameters=scenario.parameters,
+        )
+
+        success = True
+        return_code = 0
+
+        if not dry_run:
+            # Run EddyPro with monitoring
+            logging.info(f"Scenario {scenario.index}: Running EddyPro...")
+            success = run_eddypro_with_monitoring(
+                project_file=scenario_project_file,
+                eddypro_executable=eddypro_executable,
+                stream_output=stream_output,
+                metrics_interval=metrics_interval,
+                scenario_suffix=scenario.suffix,
+            )
+            return_code = 0 if success else 1
+        else:
+            logging.info(
+                f"Scenario {scenario.index}: Dry run mode - skipping execution"
+            )
+
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+
+        # Build scenario metadata
+        metadata = {
+            "scenario_index": scenario.index,
+            "scenario_suffix": scenario.suffix,
+            "scenario_params": scenario.parameters,
+            "project_file": str(scenario_project_file),
+            "output_dir": str(scenario_output_dir),
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "duration_seconds": duration,
+            "success": success,
+            "return_code": return_code,
+            "dry_run": dry_run,
+        }
+
+        # Write scenario manifest
+        manifest_path = scenario_output_dir / f"scenario_manifest{scenario.suffix}.json"
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2)
+
+        logging.info(
+            f"Scenario {scenario.index} {'completed' if success else 'failed'} "
+            f"in {duration:.1f}s"
+        )
+
+    except Exception as e:
+        end_time = datetime.now()
+        duration = (end_time - start_time).total_seconds()
+
+        logging.exception(f"Scenario {scenario.index} failed with exception")
+
+        metadata = {
+            "scenario_index": scenario.index,
+            "scenario_suffix": scenario.suffix,
+            "scenario_params": scenario.parameters,
+            "project_file": (
+                str(scenario_project_file) if scenario_project_file else None
+            ),
+            "output_dir": str(scenario_output_dir),
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "duration_seconds": duration,
+            "success": False,
+            "return_code": -1,
+            "error": str(e),
+            "dry_run": dry_run,
+        }
+
+    return metadata
+
+
+def run_scenario_batch(
+    scenario_list: List[Scenario],
+    template_path: Path,
+    output_base_dir: Path,
+    eddypro_executable: Path,
+    stream_output: bool,
+    metrics_interval: float,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Execute a batch of scenarios sequentially.
+
+    Args:
+        scenario_list: List of Scenario objects to execute
+        template_path: Path to EddyPro project template
+        output_base_dir: Base directory for all scenario outputs
+        eddypro_executable: Path to EddyPro executable
+        stream_output: Whether to stream subprocess output
+        metrics_interval: Performance monitoring sampling interval
+        dry_run: If True, only create files without running EddyPro
+
+    Returns:
+        List of scenario metadata dictionaries
+    """
+    logging.info(f"Starting batch execution of {len(scenario_list)} scenarios")
+
+    scenario_results = []
+    for scenario in scenario_list:
+        result = run_single_scenario(
+            scenario=scenario,
+            template_path=template_path,
+            output_base_dir=output_base_dir,
+            eddypro_executable=eddypro_executable,
+            stream_output=stream_output,
+            metrics_interval=metrics_interval,
+            dry_run=dry_run,
+        )
+        scenario_results.append(result)
+
+    # Summary
+    successful = sum(1 for r in scenario_results if r["success"])
+    failed = len(scenario_results) - successful
+
+    logging.info(f"Scenario batch completed: {successful} successful, {failed} failed")
+
+    return scenario_results
 
 
 # TODO: Add remaining functions from eddypro_batch_processor.py

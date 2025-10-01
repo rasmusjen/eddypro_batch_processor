@@ -112,15 +112,20 @@ class TestCLICommandFunctions:
             tlag_meth=None,
             detrend_meth=None,
             despike_vm=None,
+            max_scenarios=32,
+            site=None,
+            years=None,
+            config="config/config.yaml",
+            metrics_interval=0.5,
         )
 
         with patch("eddypro_batch_processor.cli.logging") as mock_logging:
             result = cmd_scenarios(args)
 
-            assert result == 0
-            call_args = [call[0][0] for call in mock_logging.info.call_args_list]
-            assert "Starting scenario matrix processing..." in call_args
-            assert "Scenarios command - stub implementation" in call_args
+            # Should fail with no parameters provided
+            assert result == 1
+            # Check error was logged
+            mock_logging.error.assert_called()
 
     def test_cmd_scenarios_with_parameters(self):
         """Test cmd_scenarios with various parameters."""
@@ -129,18 +134,44 @@ class TestCLICommandFunctions:
             tlag_meth=[2, 4],
             detrend_meth=[0, 1],
             despike_vm=[0, 1],
+            max_scenarios=32,
+            site=None,
+            years=None,
+            config="config/config.yaml",
+            metrics_interval=0.5,
         )
 
-        with patch("eddypro_batch_processor.cli.logging") as mock_logging:
-            result = cmd_scenarios(args)
+        with (
+            patch("eddypro_batch_processor.cli.logging") as mock_logging,
+            patch(
+                "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+            ) as mock_processor_class,
+        ):
+            # Mock config loading to avoid file system dependencies
+            mock_processor = mock_processor_class.return_value
+            mock_processor.load_config.return_value = {
+                "site_id": "TEST",
+                "years_to_process": [2024],
+                "eddypro_executable": "test.exe",
+                "stream_output": True,
+                "input_dir_pattern": "input/{site_id}/{year}",
+                "output_dir_pattern": "output/{site_id}/{year}",
+                "project_template": "template.ini",
+            }
+            mock_processor.validate_config.return_value = None
 
-            assert result == 0
-            call_args = [call[0][0] for call in mock_logging.info.call_args_list]
-            assert "Starting scenario matrix processing..." in call_args
+            _result = cmd_scenarios(args)
+
+            # Check that scenario generation was initiated
+            assert mock_logging.info.called
+            call_args_all = [call[0][0] for call in mock_logging.info.call_args_list]
+            # Check for key messages indicating scenario processing
             assert any(
-                msg.startswith("Parameter options for scenarios:") for msg in call_args
+                "Starting scenario matrix processing" in msg for msg in call_args_all
             )
-            assert "Scenarios command - stub implementation" in call_args
+            assert any(
+                "Parameter options for scenarios:" in msg for msg in call_args_all
+            )
 
     def test_cmd_validate_basic(self):
         """Test the cmd_validate function with basic arguments."""

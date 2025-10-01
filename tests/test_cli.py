@@ -105,7 +105,7 @@ def test_cli_scenarios_stub():
     )
 
     assert result.returncode == 0
-    assert "Scenarios command - stub implementation" in result.stdout
+    assert "Generated 2 scenario(s):" in result.stdout
     assert "Parameter options for scenarios:" in result.stdout
 
 

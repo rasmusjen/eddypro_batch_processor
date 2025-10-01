@@ -9,9 +9,10 @@ and performance monitoring.
 import argparse
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
-from . import ini_tools
+from . import core, ini_tools, scenarios
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -248,7 +249,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_scenarios(args: argparse.Namespace) -> int:
+def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
     """Execute the scenarios command."""
     logging.info("Starting scenario matrix processing...")
 
@@ -263,21 +264,106 @@ def cmd_scenarios(args: argparse.Namespace) -> int:
     if args.despike_vm:
         parameter_options["despike_vm"] = args.despike_vm
 
+    if not parameter_options:
+        logging.error(
+            "No parameter options provided. Specify at least one parameter "
+            "with multiple values (e.g., --rot-meth 1 3)"
+        )
+        return 1
+
     # Validate each parameter value in the options
-    if parameter_options:
-        try:
-            for param_name, values in parameter_options.items():
-                for value in values:
-                    ini_tools.validate_parameter(param_name, value)
-            logging.info(f"Parameter options for scenarios: {parameter_options}")
-        except ini_tools.INIParameterError as e:
-            # Use error instead of exception to avoid stack trace for user input errors
-            logging.error(f"Invalid scenario parameter: {e}")  # noqa: TRY400
+    try:
+        for param_name, values in parameter_options.items():
+            for value in values:
+                ini_tools.validate_parameter(param_name, value)
+        logging.info(f"Parameter options for scenarios: {parameter_options}")
+    except ini_tools.INIParameterError as e:
+        logging.error(f"Invalid scenario parameter: {e}")  # noqa: TRY400
+        return 1
+
+    # Generate scenarios with Cartesian product
+    try:
+        scenario_list = scenarios.generate_scenarios(
+            parameter_options=parameter_options,
+            max_scenarios=args.max_scenarios,
+        )
+    except scenarios.ScenarioLimitExceededError as e:
+        logging.error(str(e))  # noqa: TRY400
+        return 1
+    except ValueError as e:
+        logging.error(f"Scenario generation error: {e}")  # noqa: TRY400
+        return 1
+
+    # Display scenario summary
+    summary = scenarios.format_scenario_summary(scenario_list)
+    logging.info("\n" + summary)
+
+    # Load configuration
+    config_path = Path(args.config)
+    processor = core.EddyProBatchProcessor(config_path)
+    try:
+        config = processor.load_config()
+        processor.validate_config(config)
+    except SystemExit:
+        return 1
+
+    # Apply CLI overrides
+    site_id = args.site if args.site else config.get("site_id")
+    years = args.years if args.years else config.get("years_to_process", [])
+    eddypro_exe = Path(config["eddypro_executable"])
+    stream_output = config.get("stream_output", True)
+    metrics_interval = args.metrics_interval
+
+    if not site_id:
+        logging.error("Site ID not provided via CLI or config")
+        return 1
+
+    if not years:
+        logging.error("Years to process not provided via CLI or config")
+        return 1
+
+    # Process each year with all scenarios
+    start_time = datetime.now()
+
+    for year in years:
+        logging.info(f"Processing year {year} with {len(scenario_list)} scenarios")
+
+        # Determine paths
+        input_pattern = config.get("input_dir_pattern", "")
+        output_pattern = config.get("output_dir_pattern", "")
+
+        input_dir = Path(input_pattern.format(year=year, site_id=site_id))
+        output_base_dir = Path(output_pattern.format(year=year, site_id=site_id))
+
+        if not input_dir.exists():
+            logging.warning(f"Input directory not found: {input_dir}, skipping year")
+            continue
+
+        # Template project file path (from config or default)
+        template_path = Path(config.get("project_template", ""))
+        if not template_path.exists():
+            logging.error(f"Project template not found: {template_path}")
             return 1
 
-    # TODO: Calculate Cartesian product and check scenario limit
-    # TODO: Implement scenario logic
-    logging.info("Scenarios command - stub implementation")
+        # Run scenario batch
+        scenario_results = core.run_scenario_batch(
+            scenario_list=scenario_list,
+            template_path=template_path,
+            output_base_dir=output_base_dir,
+            eddypro_executable=eddypro_exe,
+            stream_output=stream_output,
+            metrics_interval=metrics_interval,
+            dry_run=hasattr(args, "dry_run") and args.dry_run,
+        )
+
+        # Log results
+        successful = sum(1 for r in scenario_results if r["success"])
+        failed = len(scenario_results) - successful
+        logging.info(f"Year {year}: {successful} scenarios successful, {failed} failed")
+
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+    logging.info(f"Scenario processing completed in {duration:.1f}s")
 
     return 0
 
