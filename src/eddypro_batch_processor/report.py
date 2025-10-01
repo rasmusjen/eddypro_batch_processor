@@ -477,9 +477,9 @@ def generate_html_report(
             <h2>Run Summary</h2>
             <p><strong>Run ID:</strong> {run_id}</p>
             <p><strong>Timestamp:</strong> {timestamp}</p>
-            <p><strong>Duration:</strong> {duration:.2f} seconds ({duration/60:.2f} minutes)</p>
+            <p><strong>Duration:</strong> {duration:.2f} seconds ({duration / 60:.2f} minutes)</p>
             <p><strong>Site ID:</strong> {site_id}</p>
-            <p><strong>Years Processed:</strong> {', '.join(map(str, years))}</p>
+            <p><strong>Years Processed:</strong> {", ".join(map(str, years))}</p>
             <p><strong>Overall Status:</strong> <span class="{status_class}">{status_text}</span></p>
         </div>
 """
@@ -513,7 +513,7 @@ def generate_html_report(
                 f"""
             <tr>
                 <td>{name}</td>
-                <td>{params_str or 'baseline'}</td>
+                <td>{params_str or "baseline"}</td>
                 <td>{duration_s:.2f}</td>
                 <td class="{status_class}">{status_text}</td>
             </tr>
@@ -545,9 +545,9 @@ def generate_html_report(
         f"""
         <h2>Environment</h2>
         <div class="summary-box">
-            <p><strong>Python Version:</strong> {env_info.get('python_version', 'unknown')}</p>
-            <p><strong>Platform:</strong> {env_info.get('platform', 'unknown')}</p>
-            <p><strong>Processor:</strong> {env_info.get('processor', 'unknown')}</p>
+            <p><strong>Python Version:</strong> {env_info.get("python_version", "unknown")}</p>
+            <p><strong>Platform:</strong> {env_info.get("platform", "unknown")}</p>
+            <p><strong>Processor:</strong> {env_info.get("processor", "unknown")}</p>
         </div>
 """
     )

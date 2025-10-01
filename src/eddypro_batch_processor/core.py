@@ -122,7 +122,7 @@ class EddyProBatchProcessor:
         report_charts = config.get("report_charts", "plotly")
         if report_charts not in ["plotly", "svg", "none"]:
             logging.error(
-                "Invalid 'report_charts' value. " "Must be one of: plotly, svg, none."
+                "Invalid 'report_charts' value. Must be one of: plotly, svg, none."
             )
             sys.exit(1)
 
