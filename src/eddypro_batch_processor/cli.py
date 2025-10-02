@@ -7,12 +7,14 @@ and performance monitoring.
 """
 
 import argparse
+import json
 import logging
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import core, ini_tools, scenarios, validation
+from . import core, ini_tools, report, scenarios, validation
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -183,6 +185,11 @@ Examples:
         "--years", nargs="+", type=int, help="Years to process"
     )
     scenarios_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate files without executing EddyPro",
+    )
+    scenarios_parser.add_argument(
         "--metrics-interval",
         type=float,
         default=0.5,
@@ -211,9 +218,33 @@ Examples:
     return parser
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    """Execute the run command."""
+def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
+    """Execute the run command.
+
+    Orchestrates the full processing pipeline:
+    1. Load and validate configuration
+    2. Apply CLI overrides
+    3. Generate project files with parameter overrides
+    4. Execute EddyPro processing (or dry-run)
+    5. Capture metrics and generate reports
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
     logging.info("Starting EddyPro batch processing run...")
+    start_time = datetime.now()
+
+    # Load configuration
+    config_path = Path(args.config)
+    processor = core.EddyProBatchProcessor(config_path)
+    try:
+        config = processor.load_config()
+        processor.validate_config(config)
+    except SystemExit:
+        return 1
 
     # Collect INI parameter overrides
     ini_parameters = {}
@@ -232,21 +263,154 @@ def cmd_run(args: argparse.Namespace) -> int:
             validated_params = ini_tools.validate_parameters(ini_parameters)
             logging.info(f"INI parameter overrides: {validated_params}")
         except ini_tools.INIParameterError as e:
-            # Use error instead of exception to avoid stack trace for user input errors
             logging.error(f"Invalid INI parameter: {e}")  # noqa: TRY400
             return 1
 
-    # TODO: Implement run logic using EddyProBatchProcessor
-    logging.info("Run command - stub implementation")
-    logging.info(f"Config: {args.config}")
-    if args.site:
-        logging.info(f"Site override: {args.site}")
-    if args.years:
-        logging.info(f"Years override: {args.years}")
-    if args.dry_run:
-        logging.info("Dry run mode enabled")
+    # Apply CLI overrides to config
+    if getattr(args, "site", None):
+        config["site_id"] = args.site
+    if getattr(args, "years", None):
+        config["years_to_process"] = args.years
+    if getattr(args, "input_dir_pattern", None):
+        config["input_dir_pattern"] = args.input_dir_pattern
+    if getattr(args, "output_dir_pattern", None):
+        config["output_dir_pattern"] = args.output_dir_pattern
+    if getattr(args, "eddypro_exe", None):
+        config["eddypro_executable"] = args.eddypro_exe
+    if getattr(args, "stream_output", False):
+        config["stream_output"] = True
+    if getattr(args, "no_stream_output", False):
+        config["stream_output"] = False
+    if getattr(args, "mp", False):
+        config["multiprocessing"] = True
+    if getattr(args, "max_proc", None):
+        config["max_processes"] = args.max_proc
+    if getattr(args, "metrics_interval", None):
+        config["metrics_interval_seconds"] = args.metrics_interval
+    if getattr(args, "reports_dir", None):
+        config["reports_dir"] = args.reports_dir
+    if getattr(args, "report_charts", None):
+        config["report_charts"] = args.report_charts
 
-    return 0
+    # Extract key settings
+    site_id = config["site_id"]
+    years = config["years_to_process"]
+    eddypro_exe = Path(config["eddypro_executable"])
+    stream_output = config.get("stream_output", True)
+    metrics_interval = config.get("metrics_interval_seconds", 0.5)
+    dry_run = args.dry_run
+    config["dry_run"] = dry_run  # Store in config for manifest
+
+    if dry_run:
+        logging.info("Dry run mode enabled - EddyPro will not be executed")
+
+    # Find project template
+    default_template = "config/EddyProProject_template.ini"
+    template_path = Path(config.get("project_template", default_template))
+    if not template_path.exists():
+        # Try alternate locations
+        alternate_paths = [
+            Path("config/EddyProProject_template.ini"),
+            (
+                Path(__file__).parent.parent.parent
+                / "config"
+                / "EddyProProject_template.ini"
+            ),
+        ]
+        for alt_path in alternate_paths:
+            if alt_path.exists():
+                template_path = alt_path
+                break
+
+        if not template_path.exists():
+            logging.error(f"Project template not found: {template_path}")
+            return 1
+
+    # Process each year
+    overall_success = True
+    years_processed = []
+
+    for year in years:
+        logging.info(f"Processing year {year} for site {site_id}")
+
+        # Determine paths
+        output_pattern = config["output_dir_pattern"]
+        output_dir = Path(output_pattern.format(year=year, site_id=site_id))
+
+        # Create output directory
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate project file with parameter overrides
+        project_file = output_dir / f"{site_id}_{year}.eddypro"
+        try:
+            if ini_parameters:
+                ini_tools.create_patched_ini(
+                    template_path=template_path,
+                    output_path=project_file,
+                    parameters=ini_parameters,
+                )
+            else:
+                # Copy template without modifications
+                shutil.copy(template_path, project_file)
+
+            logging.info(f"Created project file: {project_file}")
+        except Exception:
+            logging.exception("Failed to create project file")
+            overall_success = False
+            continue
+
+        # Execute EddyPro (or skip in dry-run mode)
+        if not dry_run:
+            exit_code = core.run_subprocess_with_monitoring(
+                command=str(eddypro_exe),
+                working_dir=output_dir,
+                stream_output=stream_output,
+                metrics_interval=metrics_interval,
+                output_dir=output_dir,
+                scenario_suffix="",
+            )
+
+            if exit_code != 0:
+                logging.error(f"EddyPro processing failed for year {year}")
+                overall_success = False
+            else:
+                msg = f"EddyPro processing completed successfully for year {year}"
+                logging.info(msg)
+                years_processed.append(year)
+        else:
+            logging.info(f"Dry run: skipped EddyPro execution for year {year}")
+            years_processed.append(year)
+
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+
+    # Generate reports
+    if years_processed:
+        try:
+            output_pattern = config["output_dir_pattern"]
+            first_year_dir = output_pattern.format(year=years[0], site_id=site_id)
+            output_base = Path(first_year_dir)
+            core.generate_run_report(
+                config=config,
+                site_id=site_id,
+                years_processed=years_processed,
+                output_base_dir=output_base,
+                start_time=start_time,
+                end_time=end_time,
+                overall_success=overall_success,
+            )
+            logging.info("Reports generated successfully")
+        except Exception as e:
+            logging.warning(f"Failed to generate reports: {e}")
+
+    # Final summary
+    logging.info(f"Processing completed in {duration:.1f}s")
+    if overall_success and years_processed:
+        logging.info(f"Successfully processed {len(years_processed)} year(s)")
+        return 0
+    else:
+        logging.error("Processing completed with errors")
+        return 1
 
 
 def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
@@ -324,6 +488,7 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
 
     # Process each year with all scenarios
     start_time = datetime.now()
+    all_scenario_results = []
 
     for year in years:
         logging.info(f"Processing year {year} with {len(scenario_list)} scenarios")
@@ -356,6 +521,9 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
             dry_run=hasattr(args, "dry_run") and args.dry_run,
         )
 
+        # Collect results for reporting
+        all_scenario_results.extend(scenario_results)
+
         # Log results
         successful = sum(1 for r in scenario_results if r["success"])
         failed = len(scenario_results) - successful
@@ -364,6 +532,76 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
     logging.info(f"Scenario processing completed in {duration:.1f}s")
+
+    # Generate reports with actual scenario information
+    if years and all_scenario_results:
+        try:
+            output_pattern = config.get("output_dir_pattern", "")
+            first_year_dir = output_pattern.format(year=years[0], site_id=site_id)
+            output_base = Path(first_year_dir)
+
+            # Create reports directory
+            reports_dir_config = config.get("reports_dir")
+            if reports_dir_config:
+                reports_dir = Path(reports_dir_config)
+            else:
+                reports_dir = output_base / "reports"
+            reports_dir = report.create_reports_directory(
+                reports_dir.parent, reports_dir.name
+            )
+
+            # Generate run ID
+            run_id = f"{site_id}_{start_time.strftime('%Y%m%d_%H%M%S')}"
+
+            # Collect output directories
+            output_dirs = []
+            for year in years:
+                year_dir = Path(output_pattern.format(year=year, site_id=site_id))
+                if year_dir.exists():
+                    output_dirs.append(year_dir)
+
+            # Compute config checksum
+            config_checksum = str(hash(json.dumps(config, sort_keys=True)))
+
+            # Build scenario list for manifest
+            manifest_scenarios = []
+            for result in all_scenario_results:
+                manifest_scenarios.append(
+                    {
+                        "scenario_index": result.get("scenario_index", 0),
+                        "scenario_suffix": result.get("scenario_suffix", ""),
+                        "scenario_params": result.get("scenario_params", {}),
+                        "start_time": result.get("start_time", start_time.isoformat()),
+                        "end_time": result.get("end_time", end_time.isoformat()),
+                        "duration_seconds": result.get("duration_seconds", 0),
+                        "success": result.get("success", False),
+                    }
+                )
+
+            # Generate and write manifest
+            manifest = report.generate_run_manifest(
+                run_id=run_id,
+                config=config,
+                config_checksum=config_checksum,
+                site_id=site_id,
+                years_processed=years,
+                scenarios=manifest_scenarios,
+                start_time=start_time,
+                end_time=end_time,
+                overall_success=all(r["success"] for r in all_scenario_results),
+                output_dirs=output_dirs,
+            )
+
+            # Add dry_run flag to config for manifest
+            manifest["dry_run"] = hasattr(args, "dry_run") and args.dry_run
+
+            # Write manifest
+            manifest_path = reports_dir / "run_manifest.json"
+            report.write_run_manifest(manifest, manifest_path)
+
+            logging.info("Reports generated successfully")
+        except Exception:
+            logging.exception("Failed to generate reports")
 
     return 0
 
@@ -389,8 +627,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
     )
 
     # Format and display report
-    report = validation.format_validation_report(results)
-    print("\n" + report)
+    validation_report = validation.format_validation_report(results)
+    print("\n" + validation_report)
 
     # Count total errors
     total_errors = sum(len(errors) for errors in results.values())
@@ -404,13 +642,129 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """Execute the status command."""
+    """Execute the status command.
+
+    Read and display the last run manifest with formatted output showing:
+    - Run summary (ID, duration, success status)
+    - Scenario table with results
+    - Key metrics if available
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        Exit code (0 for success, 1 for failure/manifest not found)
+    """
     logging.info("Checking last run status...")
 
-    # TODO: Implement status logic
-    logging.info("Status command - stub implementation")
+    # Determine reports directory
     if args.reports_dir:
-        logging.info(f"Reports directory: {args.reports_dir}")
+        reports_dir = Path(args.reports_dir)
+    else:
+        # Try to find manifest in common locations
+        config_path = Path(args.config)
+        try:
+            processor = core.EddyProBatchProcessor(config_path)
+            config = processor.load_config()
+            reports_dir_config = config.get("reports_dir")
+            if reports_dir_config:
+                reports_dir = Path(reports_dir_config)
+            else:
+                # Use default pattern
+                site_id = config.get("site_id", "")
+                years = config.get("years_to_process", [])
+                if site_id and years:
+                    output_pattern = config.get("output_dir_pattern", "")
+                    first_year_dir = output_pattern.format(
+                        year=years[0], site_id=site_id
+                    )
+                    reports_dir = Path(first_year_dir) / "reports"
+                else:
+                    logging.error("Cannot determine reports directory from config")
+                    return 1
+        except Exception:
+            logging.exception("Failed to load config for status check")
+            return 1
+
+    # Look for manifest file
+    manifest_path = reports_dir / "run_manifest.json"
+    if not manifest_path.exists():
+        logging.error(f"No manifest found at: {manifest_path}")
+        logging.info(
+            "Tip: Run processing first or specify --reports-dir if using "
+            "a custom location"
+        )
+        return 1
+
+    # Load and parse manifest
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+    except json.JSONDecodeError:
+        logging.exception(f"Corrupt manifest file: {manifest_path}")
+        return 1
+    except Exception:
+        logging.exception(f"Failed to read manifest: {manifest_path}")
+        return 1
+
+    # Display formatted status
+    print("\n" + "=" * 70)
+    print("EddyPro Batch Processing Status")
+    print("=" * 70)
+
+    # Run summary
+    run_id = manifest.get("run_id", "unknown")
+    start_time_str = manifest.get("start_time", "")
+    end_time_str = manifest.get("end_time", "")
+    duration = manifest.get("duration_seconds", 0)
+    dry_run = manifest.get("dry_run", False)
+
+    print(f"\nRun ID: {run_id}")
+    print(f"Start Time: {start_time_str}")
+    print(f"End Time: {end_time_str}")
+    print(f"Duration: {duration:.1f} seconds")
+    print(f"Mode: {'Dry Run' if dry_run else 'Production'}")
+
+    # Scenarios summary
+    scenarios_data = manifest.get("scenarios", [])
+    if scenarios_data:
+        print(f"\nScenarios Processed: {len(scenarios_data)}")
+        print("\n" + "-" * 70)
+        print(f"{'Scenario':<25} {'Duration (s)':<15} {'Status':<10}")
+        print("-" * 70)
+
+        for scenario in scenarios_data:
+            scenario_name = scenario.get("scenario_name", "unknown")
+            scenario_duration = scenario.get("duration_seconds", 0)
+            scenario_success = scenario.get("success", False)
+            status = "SUCCESS" if scenario_success else "FAILED"
+
+            print(f"{scenario_name:<25} {scenario_duration:<15.1f} {status:<10}")
+
+    # Metrics summary
+    metrics_summary = manifest.get("metrics_summary", {})
+    if metrics_summary:
+        print("\n" + "-" * 70)
+        print("Performance Metrics")
+        print("-" * 70)
+        for key, value in metrics_summary.items():
+            if isinstance(value, (int, float)):
+                print(f"{key}: {value:.2f}")
+            else:
+                print(f"{key}: {value}")
+
+    # Output paths
+    outputs = manifest.get("outputs", [])
+    if outputs:
+        print("\n" + "-" * 70)
+        print("Output Directories")
+        print("-" * 70)
+        for output_path in outputs:
+            print(f"  {output_path}")
+
+    print("\n" + "=" * 70)
+    print(f"Manifest location: {manifest_path}")
+    print("=" * 70 + "\n")
 
     return 0
 

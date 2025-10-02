@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Milestone 9: CLI Implementation** - Complete CLI pipeline functionality
+  - Implemented full `cmd_run()` function for end-to-end processing pipeline
+    - Configuration loading and validation with CLI overrides
+    - INI parameter validation and project file generation
+    - Dry-run mode support for testing without EddyPro execution
+    - Comprehensive error handling and logging at each stage
+    - Report and manifest generation after processing
+  - Implemented full `cmd_scenarios()` function for Cartesian product scenario execution
+    - Multi-parameter scenario generation (rot_meth × tlag_meth × detrend_meth × despike_vm)
+    - Scenario cap enforcement (32 combinations limit)
+    - Custom manifest generation with actual scenario results
+    - Individual scenario tracking with success/failure status
+    - Parallel batch processing with configurable workers
+  - Implemented full `cmd_status()` function for run status reporting
+    - Manifest reading from reports directory
+    - Formatted output with run summary and scenario table
+    - Support for custom reports directory override
+  - Enhanced `generate_run_manifest()` in report.py
+    - Added start_time, end_time, config_snapshot, dry_run fields
+    - Support for both single runs and scenario matrices
+  - All CLI functions use defensive attribute access with getattr() for robustness
+  - Integration tests now passing without xfail markers (10/10 tests pass)
+  - Unit tests updated to provide complete config fixtures and manifest files
+  - Coverage maintained at 71.79% (above 70% minimum floor)
+
 - **Milestone 8: End-to-End Integration Tests** - Comprehensive dry-run integration testing
   - New `test_e2e_integration.py` module with full pipeline integration tests
   - End-to-end tests for dry-run mode verifying:
