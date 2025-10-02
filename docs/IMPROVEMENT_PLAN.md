@@ -338,23 +338,23 @@ Milestone 6: Scenario runner
 Milestone 7: Validate command and documentation
 
 - Tasks
-  - Implement `validate` scope: config keys, paths, ECMD schema and sanity checks; non-zero exit on failure
-  - Create docs skeleton: `USAGE.md`, `SCENARIOS.md`, `CONFIG.md`, `REPORTING.md`, `DEVELOPMENT.md`
-  - Slim README; link to docs
+  - [x] Implement `validate` scope: config keys, paths, ECMD schema and sanity checks; non-zero exit on failure
+  - [x] Create docs skeleton: `USAGE.md`, `SCENARIOS.md`, `CONFIG.md`, `REPORTING.md`, `DEVELOPMENT.md`
+  - [x] Slim README; link to docs
 - Deliverables
-  - Unit tests for `validate` with good/bad fixtures; docs committed
+  - [x] Unit tests for `validate` with good/bad fixtures; docs committed
 - Definition of Done
-  - `eddypro-batch validate --config ...` returns zero on valid, non-zero on invalid
+  - [x] `eddypro-batch validate --config ...` returns zero on valid, non-zero on invalid
 
 Milestone 8: End-to-end dry-run (integration)
 
 - Tasks
-  - Add an integration test that runs `run` in dry-run mode (mock EddyPro) to exercise full pipeline
-  - Verify outputs: reports directory, manifest, and (mock) scenario files
+  - [x] Add an integration test that runs `run` in dry-run mode (mock EddyPro) to exercise full pipeline
+  - [x] Verify outputs: reports directory, manifest, and (mock) scenario files
 - Deliverables
-  - Integration test script/pytest; mock fixtures for EddyPro and file system
+  - [x] Integration test script/pytest; mock fixtures for EddyPro and file system
 - Definition of Done
-  - Integration test passes locally and in CI
+  - [x] Integration test passes locally and in CI
 
 Note: Milestone order is optimized for testability and incremental value; each milestone should leave the repo in a usable state.
 
