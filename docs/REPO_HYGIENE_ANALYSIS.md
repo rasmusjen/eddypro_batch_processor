@@ -589,12 +589,12 @@ Add note: "Copy config/config.yaml.example to config/config.yaml and edit paths"
 
 ## 6. Priority Action Plan
 
-### Phase 1: Critical (Do First) 🔴
+### Phase 1: Critical (Do First) 🔴 ✅ COMPLETED
 
-1. **Update `.gitignore`** - Add missing patterns for coverage, build artifacts, IDE files
-2. **Remove legacy script** - Delete or archive `src/eddypro_batch_processor.py`
-3. **Remove legacy tests** - Delete `tests/test_eddypro_batch_processor.py`
-4. **Clean working directory** - Untrack coverage files, workspace file
+1. ✅ **Update `.gitignore`** - Add missing patterns for coverage, build artifacts, IDE files
+2. ✅ **Remove legacy script** - Delete or archive `src/eddypro_batch_processor.py` (already removed in previous milestones)
+3. ✅ **Remove legacy tests** - Delete `tests/test_eddypro_batch_processor.py` (already removed in previous milestones)
+4. ✅ **Clean working directory** - Untrack coverage files, workspace file
 
 ### Phase 2: High Priority (Next Sprint) 🟡
 
