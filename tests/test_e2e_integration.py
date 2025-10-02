@@ -211,9 +211,8 @@ despike_vm = 0
             manifest = json.load(f)
 
         # Should have 4 scenarios (2 rot_meth × 2 tlag_meth)
-        assert len(manifest["scenarios"]) == 4, (
-            f"Expected 4 scenarios, got {len(manifest['scenarios'])}"
-        )
+        n_scenarios = len(manifest["scenarios"])
+        assert n_scenarios == 4, f"Expected 4 scenarios, got {n_scenarios}"
 
         # Verify scenario naming is deterministic
         scenario_names = [s["scenario_suffix"] for s in manifest["scenarios"]]
@@ -224,9 +223,8 @@ despike_vm = 0
             "_rot3_tlag4",
         ]
         for expected in expected_suffixes:
-            assert any(expected in name for name in scenario_names), (
-                f"Missing scenario with suffix {expected}"
-            )
+            found = any(expected in name for name in scenario_names)
+            assert found, f"Missing suffix {expected}"
 
     def test_dry_run_with_validation(
         self, tmp_path: Path, config_file: Path, template_ini: Path
@@ -257,9 +255,9 @@ despike_vm = 0
         )
 
         # Validation should pass for config structure
-        assert validate_result.returncode == 0, (
-            f"Validation failed: {validate_result.stderr}"
-        )
+        rc = validate_result.returncode
+        msg = f"Validation failed: {validate_result.stderr}"
+        assert rc == 0, msg
 
         # Then run in dry-run mode
         run_result = subprocess.run(
@@ -373,9 +371,8 @@ despike_vm = 0
         )
 
         # This should succeed (exactly at cap)
-        assert result.returncode == 0, (
-            f"Should succeed with 32 scenarios: {result.stderr}"
-        )
+        msg = f"Should succeed at cap: {result.stderr}"
+        assert result.returncode == 0, msg
 
     def test_dry_run_reports_generation(
         self, tmp_path: Path, config_file: Path, template_ini: Path, test_config: dict
