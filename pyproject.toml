@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "eddypro-batch-processor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automated EddyPro processing with scenario support and performance monitoring"
 authors = [{name = "Rasmus Jensen", email = "raje@ecos.au.dk"}]
 readme = "README.md"
@@ -83,7 +83,6 @@ ignore = [
 "tests/*" = ["PLR2004", "TRY301"]  # Magic values and bare except OK in tests
 "src/eddypro_batch_processor/cli.py" = ["PLR0912", "PLR0915"]  # Allow complex CLI logic
 "src/eddypro_batch_processor/report.py" = ["E501"]  # Allow long HTML strings in templates
-"src/eddypro_batch_processor.py" = ["ALL"]  # Legacy script - exclude from linting during transition
 
 [tool.ruff.lint.isort]
 known-first-party = ["eddypro_batch_processor"]

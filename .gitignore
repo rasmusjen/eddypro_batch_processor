@@ -20,11 +20,31 @@ data/processed/
 
 # Configuration files with secrets
 #config/*.ini
-#config/*.yaml
+config/config.yaml  # User-specific config (use config.yaml.example as template)
+
+# Test coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+*.egg
 
 # OS-specific files
 .DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -36,3 +56,21 @@ Thumbs.db
 .idea/
 *.sublime-project
 *.sublime-workspace
+*.code-workspace
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Documentation builds
+docs/_build/
+docs/.doctrees/
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment files
+.env
+.env.local
+.envrc

@@ -9,7 +9,6 @@
 	- `config/EddyProProject_template.ini`
 	- `config/GL-ZaF_metadata_template.ini`
 	- `config/GL-ZaF_dynamic_metadata.ini`
-- Working baseline: `src/eddypro_batch_processor.py` is currently functional and must be treated as the starting point. Refactors should preserve existing behavior and outputs unless explicitly approved.
 
 ## Code Quality
 - Enforce **black (88)**, **ruff** (E,F,W,I,N,UP,B,SIM,TRY,PL), strict type hints; keep **mypy/pyright clean**.

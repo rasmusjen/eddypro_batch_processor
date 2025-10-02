@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Nothing yet
+
+## [0.2.0] - 2025-10-02
+
+### Added
+
 - **Milestone 9: CLI Implementation** - Complete CLI pipeline functionality
   - Implemented full `cmd_run()` function for end-to-end processing pipeline
     - Configuration loading and validation with CLI overrides
