@@ -130,7 +130,7 @@ despike_vm = 0
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
 
         # Verify output directory structure
-        output_base = Path(test_config["output_dir_pattern"])
+        output_base = tmp_path / "processed" / "TEST-SITE" / "2021"
         reports_dir = output_base / "reports"
 
         # Check that reports directory was created
@@ -197,7 +197,7 @@ despike_vm = 0
         assert result.returncode == 0, f"Scenarios command failed: {result.stderr}"
 
         # Verify output directory
-        output_base = Path(test_config["output_dir_pattern"])
+        output_base = tmp_path / "processed" / "TEST-SITE" / "2021"
         reports_dir = output_base / "reports"
 
         # Check reports directory
@@ -242,9 +242,9 @@ despike_vm = 0
                 sys.executable,
                 "-m",
                 "eddypro_batch_processor.cli",
-                "validate",
                 "--config",
                 str(config_file),
+                "validate",
                 "--skip-paths",  # Skip path validation since paths may not exist
                 "--skip-ecmd",  # Skip ECMD validation
             ],
@@ -265,9 +265,9 @@ despike_vm = 0
                 sys.executable,
                 "-m",
                 "eddypro_batch_processor.cli",
-                "run",
                 "--config",
                 str(config_file),
+                "run",
                 "--dry-run",
             ],
             cwd=tmp_path,
@@ -294,9 +294,9 @@ despike_vm = 0
                 sys.executable,
                 "-m",
                 "eddypro_batch_processor.cli",
-                "run",
                 "--config",
                 str(config_file),
+                "run",
                 "--dry-run",
                 "--rot-meth",
                 "3",
@@ -312,7 +312,7 @@ despike_vm = 0
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
 
         # Check that project files were created
-        output_base = Path(test_config["output_dir_pattern"])
+        output_base = tmp_path / "processed" / "TEST-SITE" / "2021"
 
         # Look for .eddypro files
         eddypro_files = list(output_base.rglob("*.eddypro"))
@@ -342,9 +342,9 @@ despike_vm = 0
                 sys.executable,
                 "-m",
                 "eddypro_batch_processor.cli",
-                "scenarios",
                 "--config",
                 str(config_file),
+                "scenarios",
                 "--site",
                 "TEST-SITE",
                 "--years",
@@ -390,9 +390,9 @@ despike_vm = 0
                 sys.executable,
                 "-m",
                 "eddypro_batch_processor.cli",
-                "run",
                 "--config",
                 str(config_file),
+                "run",
                 "--dry-run",
                 "--report-charts",
                 "none",  # Disable charts for faster tests
@@ -406,7 +406,7 @@ despike_vm = 0
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
 
         # Verify reports directory and files
-        output_base = Path(test_config["output_dir_pattern"])
+        output_base = tmp_path / "processed" / "TEST-SITE" / "2021"
         reports_dir = output_base / "reports"
 
         assert reports_dir.exists(), "Reports directory not created"
