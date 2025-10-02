@@ -115,7 +115,7 @@ def test_cli_scenarios_stub():
 
 
 def test_cli_run_dry_run_stub():
-    """Test that run command accepts dry-run option."""
+    """Test that run command accepts dry-run option and executes."""
     result = subprocess.run(
         [
             sys.executable,
@@ -132,8 +132,9 @@ def test_cli_run_dry_run_stub():
     )
 
     assert result.returncode == 0
-    assert "Run command - stub implementation" in result.stdout
+    # Check for actual implementation outputs, not stub message
     assert "Dry run mode enabled" in result.stdout
+    assert "Starting EddyPro batch processing" in result.stdout
 
 
 def test_cli_no_subcommand_shows_help():

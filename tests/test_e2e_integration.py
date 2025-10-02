@@ -15,14 +15,6 @@ import pytest
 import yaml
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Integration tests require full CLI implementation. "
-        "Tests pass argument parsing but fail on output verification "
-        "because cmd_run/cmd_scenarios are stubs. Track in Milestone 9."
-    ),
-    strict=False,
-)
 class TestEndToEndIntegration:
     """End-to-end integration tests for the full processing pipeline."""
 
@@ -180,9 +172,9 @@ despike_vm = 0
                 sys.executable,
                 "-m",
                 "eddypro_batch_processor.cli",
-                "scenarios",
                 "--config",
                 str(config_file),
+                "scenarios",
                 "--site",
                 "TEST-SITE",
                 "--years",

@@ -204,14 +204,18 @@ def generate_run_manifest(
     manifest = {
         "run_id": run_id,
         "timestamp": start_time.isoformat(),
+        "start_time": start_time.isoformat(),
+        "end_time": end_time.isoformat(),
         "duration_seconds": duration_seconds,
         "site_id": site_id,
         "years_processed": years_processed,
         "config_checksum": config_checksum,
+        "config_snapshot": config,  # Include full config for reproducibility
         "overall_success": overall_success,
         "scenarios": scenarios,
         "output_dirs": [str(d) for d in output_dirs],
         "environment": get_python_environment_info(),
+        "dry_run": config.get("dry_run", False),  # Track if this was a dry run
     }
 
     if provenance:
