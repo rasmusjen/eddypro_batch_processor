@@ -596,13 +596,13 @@ Add note: "Copy config/config.yaml.example to config/config.yaml and edit paths"
 3. ✅ **Remove legacy tests** - Delete `tests/test_eddypro_batch_processor.py` (already removed in previous milestones)
 4. ✅ **Clean working directory** - Untrack coverage files, workspace file
 
-### Phase 2: High Priority (Next Sprint) 🟡
+### Phase 2: High Priority (Next Sprint) 🟡 ✅ COMPLETED
 
-5. **Update PR template** - Replace with generic template
-6. **Release v0.2.0** - Move completed milestones to versioned CHANGELOG section
-7. **Add LICENSE file** - Full GPL-3.0 text
-8. **Fix Python version docs** - Standardize on 3.8+ across all documentation
-9. **Create config.yaml.example** - Move user config out of git tracking
+5. ✅ **Update PR template** - Replace with generic template
+6. ✅ **Release v0.2.0** - Move completed milestones to versioned CHANGELOG section
+7. ✅ **Add LICENSE file** - Full GPL-3.0 text
+8. ✅ **Fix Python version docs** - Standardize on 3.8+ across all documentation
+9. ✅ **Create config.yaml.example** - Move user config out of git tracking
 
 ### Phase 3: Medium Priority (Future Milestone) 🟢
 
