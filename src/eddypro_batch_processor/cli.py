@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import core, ini_tools, scenarios
+from . import core, ini_tools, scenarios, validation
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -371,16 +371,36 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
 def cmd_validate(args: argparse.Namespace) -> int:
     """Execute the validate command."""
     logging.info("Validating configuration and environment...")
+    logging.info(f"Config file: {args.config}")
 
-    # TODO: Implement validation logic
-    logging.info("Validate command - stub implementation")
-    logging.info(f"Config: {args.config}")
-    if args.skip_paths:
-        logging.info("Skipping path existence checks")
-    if args.skip_ecmd:
-        logging.info("Skipping ECMD file validation")
+    # Load configuration
+    config_path = Path(args.config)
+    processor = core.EddyProBatchProcessor(config_path)
 
-    return 0
+    try:
+        config = processor.load_config()
+    except SystemExit:
+        # SystemExit already logged by load_config
+        return 1
+
+    # Run all validations
+    results = validation.validate_all(
+        config=config, skip_paths=args.skip_paths, skip_ecmd=args.skip_ecmd
+    )
+
+    # Format and display report
+    report = validation.format_validation_report(results)
+    print("\n" + report)
+
+    # Count total errors
+    total_errors = sum(len(errors) for errors in results.values())
+
+    if total_errors == 0:
+        logging.info("[PASS] Validation passed successfully")
+        return 0
+    else:
+        logging.error(f"[FAIL] Validation failed with {total_errors} error(s)")
+        return 1
 
 
 def cmd_status(args: argparse.Namespace) -> int:

@@ -178,14 +178,33 @@ class TestCLICommandFunctions:
             skip_ecmd=False,
         )
 
-        with patch("eddypro_batch_processor.cli.logging") as mock_logging:
+        # Mock the core functions and validation to control test outcome
+        with patch(
+            "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+        ) as mock_proc, patch(
+            "eddypro_batch_processor.cli.validation.validate_all"
+        ) as mock_validate, patch(
+            "eddypro_batch_processor.cli.validation.format_validation_report"
+        ) as mock_format:
+            # Setup mocks
+            mock_instance = mock_proc.return_value
+            mock_instance.load_config.return_value = {"test": "config"}
+            mock_validate.return_value = {
+                "config": [],
+                "paths": [],
+                "ecmd_schema": [],
+                "ecmd_sanity": [],
+            }
+            mock_format.return_value = "[PASS] All validations passed"
+
             result = cmd_validate(args)
 
             assert result == 0
-            call_args = [call[0][0] for call in mock_logging.info.call_args_list]
-            assert "Validating configuration and environment..." in call_args
-            assert "Validate command - stub implementation" in call_args
-            assert f"Config: {args.config}" in call_args
+            mock_proc.assert_called_once()
+            mock_instance.load_config.assert_called_once()
+            mock_validate.assert_called_once_with(
+                config={"test": "config"}, skip_paths=False, skip_ecmd=False
+            )
 
     def test_cmd_validate_with_skip_options(self):
         """Test cmd_validate with skip options."""
@@ -195,13 +214,31 @@ class TestCLICommandFunctions:
             skip_ecmd=True,
         )
 
-        with patch("eddypro_batch_processor.cli.logging") as mock_logging:
+        # Mock the core functions and validation to control test outcome
+        with patch(
+            "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+        ) as mock_proc, patch(
+            "eddypro_batch_processor.cli.validation.validate_all"
+        ) as mock_validate, patch(
+            "eddypro_batch_processor.cli.validation.format_validation_report"
+        ) as mock_format:
+            # Setup mocks
+            mock_instance = mock_proc.return_value
+            mock_instance.load_config.return_value = {"test": "config"}
+            mock_validate.return_value = {
+                "config": [],
+                "paths": [],
+                "ecmd_schema": [],
+                "ecmd_sanity": [],
+            }
+            mock_format.return_value = "[PASS] All validations passed"
+
             result = cmd_validate(args)
 
             assert result == 0
-            call_args = [call[0][0] for call in mock_logging.info.call_args_list]
-            assert "Skipping path existence checks" in call_args
-            assert "Skipping ECMD file validation" in call_args
+            mock_validate.assert_called_once_with(
+                config={"test": "config"}, skip_paths=True, skip_ecmd=True
+            )
 
     def test_cmd_status_basic(self):
         """Test the cmd_status function with basic arguments."""

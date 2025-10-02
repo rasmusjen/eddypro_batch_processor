@@ -316,24 +316,24 @@ Milestone 4: Performance monitoring module
 Milestone 5: Reporting (manifest + HTML)
 
 - Tasks
-  - Generate `run_manifest.json` capturing run/scenario metadata, metrics summary, outputs
-  - Generate `run_report.html` with Plotly charts by default; add `--report-charts` flag and fallbacks
-  - Store in `{output_dir_pattern}/reports` by default; support overrides
+  - [x] Generate `run_manifest.json` capturing run/scenario metadata, metrics summary, outputs
+  - [x] Generate `run_report.html` with Plotly charts by default; add `--report-charts` flag and fallbacks
+  - [x] Store in `{output_dir_pattern}/reports` by default; support overrides
 - Deliverables
-  - Unit tests assert presence and minimal schema of manifest; smoke test HTML generation
+  - [x] Unit tests assert presence and minimal schema of manifest; smoke test HTML generation
 - Definition of Done
-  - Report renders locally; manifest links scenarios to outputs
+  - [x] Report renders locally; manifest links scenarios to outputs
 
 Milestone 6: Scenario runner
 
 - Tasks
-  - Implement Cartesian product executor with deterministic suffixes and a hard cap of 32
-  - Add `--max-scenarios` guard and clear error if exceeded
-  - Update manifest and reports to include all scenarios
+  - [x] Implement Cartesian product executor with deterministic suffixes and a hard cap of 32
+  - [x] Add `--max-scenarios` guard and clear error if exceeded
+  - [x] Update manifest and reports to include all scenarios
 - Deliverables
-  - Unit tests: naming, cap enforcement, per-scenario artifact creation (mocked runs)
+  - [x] Unit tests: naming, cap enforcement, per-scenario artifact creation (mocked runs)
 - Definition of Done
-  - Scenario runs produce isolated outputs and consolidated report/manifest
+  - [x] Scenario runs produce isolated outputs and consolidated report/manifest
 
 Milestone 7: Validate command and documentation
 
