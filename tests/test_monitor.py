@@ -39,8 +39,9 @@ class TestPerformanceMonitor:
     @pytest.fixture
     def mock_psutil(self):
         """Mock psutil module for testing."""
-        with patch("eddypro_batch_processor.monitor.psutil") as mock_psutil, patch(
-            "eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", True
+        with (
+            patch("eddypro_batch_processor.monitor.psutil") as mock_psutil,
+            patch("eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", True),
         ):
             # Mock system metrics
             mock_psutil.cpu_percent.return_value = 50.0
@@ -106,9 +107,10 @@ class TestPerformanceMonitor:
 
     def test_monitor_without_psutil(self, temp_dir):
         """Test monitor behavior when psutil is not available."""
-        with patch(
-            "eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", False
-        ), pytest.raises(ImportError, match="psutil is required"):
+        with (
+            patch("eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", False),
+            pytest.raises(ImportError, match="psutil is required"),
+        ):
             PerformanceMonitor(output_dir=temp_dir)
 
     def test_create_monitor_without_psutil(self, temp_dir):
@@ -389,9 +391,10 @@ class TestFakeWorkload:
 
     def test_deterministic_sample_generation(self, temp_dir):
         """Test that monitoring produces deterministic results with fixed inputs."""
-        with patch("eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", True), patch(
-            "eddypro_batch_processor.monitor.psutil"
-        ) as mock_psutil:
+        with (
+            patch("eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", True),
+            patch("eddypro_batch_processor.monitor.psutil") as mock_psutil,
+        ):
             # Set fixed return values for deterministic testing
             mock_psutil.cpu_percent.return_value = 42.0
             mock_memory = MagicMock()
@@ -489,9 +492,10 @@ class TestErrorHandling:
 
     def test_thread_safety(self, temp_dir):
         """Test thread safety of monitoring operations."""
-        with patch("eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", True), patch(
-            "eddypro_batch_processor.monitor.psutil"
-        ) as mock_psutil:
+        with (
+            patch("eddypro_batch_processor.monitor.PSUTIL_AVAILABLE", True),
+            patch("eddypro_batch_processor.monitor.psutil") as mock_psutil,
+        ):
             # Mock psutil
             mock_psutil.cpu_percent.return_value = 50.0
             mock_memory = MagicMock()

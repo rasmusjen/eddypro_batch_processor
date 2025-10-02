@@ -7,7 +7,7 @@ ECMD file schema, and sanity checks with actionable error messages.
 
 import csv
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
 class ValidationError(Exception):
@@ -16,7 +16,7 @@ class ValidationError(Exception):
     pass
 
 
-def validate_config_structure(config: Dict[str, Any]) -> List[str]:
+def validate_config_structure(config: dict[str, Any]) -> list[str]:
     """
     Validate that all required configuration keys are present.
 
@@ -82,7 +82,7 @@ def validate_config_structure(config: Dict[str, Any]) -> List[str]:
         )
 
     if "metrics_interval_seconds" in config and not isinstance(
-        config["metrics_interval_seconds"], (int, float)
+        config["metrics_interval_seconds"], int | float
     ):
         errors.append(
             f"'metrics_interval_seconds' must be a number, got "
@@ -114,7 +114,7 @@ def validate_config_structure(config: Dict[str, Any]) -> List[str]:
     return errors
 
 
-def validate_paths(config: Dict[str, Any], skip_ecmd: bool = False) -> List[str]:
+def validate_paths(config: dict[str, Any], skip_ecmd: bool = False) -> list[str]:
     """
     Validate that required paths exist in the filesystem.
 
@@ -196,7 +196,7 @@ def validate_paths(config: Dict[str, Any], skip_ecmd: bool = False) -> List[str]
     return errors
 
 
-def validate_ecmd_schema(ecmd_path: Path) -> List[str]:
+def validate_ecmd_schema(ecmd_path: Path) -> list[str]:
     """
     Validate that ECMD CSV file contains required columns.
 
@@ -283,7 +283,7 @@ def validate_ecmd_schema(ecmd_path: Path) -> List[str]:
     return errors
 
 
-def validate_ecmd_sanity(ecmd_path: Path) -> List[str]:
+def validate_ecmd_sanity(ecmd_path: Path) -> list[str]:
     """
     Perform sanity checks on ECMD file data values.
 
@@ -371,7 +371,7 @@ def validate_ecmd_sanity(ecmd_path: Path) -> List[str]:
     return errors
 
 
-def validate_config_sanity(config: Dict[str, Any]) -> List[str]:
+def validate_config_sanity(config: dict[str, Any]) -> list[str]:
     """
     Perform sanity checks on configuration values.
 
@@ -419,10 +419,10 @@ def validate_config_sanity(config: Dict[str, Any]) -> List[str]:
 
 
 def validate_all(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     skip_paths: bool = False,
     skip_ecmd: bool = False,
-) -> Dict[str, List[str]]:
+) -> dict[str, list[str]]:
     """
     Run all validations and return categorized errors.
 
@@ -482,7 +482,7 @@ def validate_all(
     return results
 
 
-def format_validation_report(results: Dict[str, List[str]]) -> str:
+def format_validation_report(results: dict[str, list[str]]) -> str:
     """
     Format validation results as a human-readable report.
 

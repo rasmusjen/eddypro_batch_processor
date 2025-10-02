@@ -9,7 +9,6 @@ and creating deterministic scenario identifiers.
 import itertools
 import logging
 from dataclasses import dataclass
-from typing import Dict, List
 
 from . import ini_tools
 
@@ -36,7 +35,7 @@ class Scenario:
         index: Scenario number (1-based)
     """
 
-    parameters: Dict[str, int]
+    parameters: dict[str, int]
     suffix: str
     index: int
 
@@ -50,7 +49,7 @@ class Scenario:
             raise ValueError("Scenario index must be positive")
 
 
-def generate_scenario_suffix(parameters: Dict[str, int]) -> str:
+def generate_scenario_suffix(parameters: dict[str, int]) -> str:
     """
     Generate a deterministic suffix for a scenario based on its parameters.
 
@@ -94,9 +93,9 @@ def generate_scenario_suffix(parameters: Dict[str, int]) -> str:
 
 
 def generate_scenarios(
-    parameter_options: Dict[str, List[int]],
+    parameter_options: dict[str, list[int]],
     max_scenarios: int = MAX_SCENARIOS,
-) -> List[Scenario]:
+) -> list[Scenario]:
     """
     Generate all scenario combinations from parameter options.
 
@@ -160,7 +159,7 @@ def generate_scenarios(
     scenarios = []
     for index, combination in enumerate(itertools.product(*param_value_lists), start=1):
         # Build parameter dictionary for this combination
-        parameters = dict(zip(param_names, combination))
+        parameters = dict(zip(param_names, combination, strict=False))
 
         # Generate deterministic suffix
         suffix = generate_scenario_suffix(parameters)
@@ -179,7 +178,7 @@ def generate_scenarios(
     return scenarios
 
 
-def format_scenario_summary(scenarios: List[Scenario]) -> str:
+def format_scenario_summary(scenarios: list[Scenario]) -> str:
     """
     Format a human-readable summary of scenarios.
 
@@ -212,8 +211,8 @@ def format_scenario_summary(scenarios: List[Scenario]) -> str:
 
 
 def validate_scenario_parameters(
-    parameter_options: Dict[str, List[int]],
-) -> Dict[str, List[int]]:
+    parameter_options: dict[str, list[int]],
+) -> dict[str, list[int]]:
     """
     Validate parameter options before scenario generation.
 

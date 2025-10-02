@@ -13,7 +13,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -25,12 +25,12 @@ from .scenarios import Scenario
 class EddyProBatchProcessor:
     """Main class for EddyPro batch processing operations."""
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Path | None = None):
         """Initialize the processor with optional config path."""
         self.config_path = config_path or Path("config/config.yaml")
-        self.config: Dict[str, Any] = {}
+        self.config: dict[str, Any] = {}
 
-    def load_config(self, config_path: Optional[Path] = None) -> Dict[str, Any]:
+    def load_config(self, config_path: Path | None = None) -> dict[str, Any]:
         """Load the YAML configuration file.
 
         This function attempts to read and parse a YAML configuration file
@@ -54,7 +54,7 @@ class EddyProBatchProcessor:
 
         try:
             with self.config_path.open("r") as file:
-                config: Dict[str, Any] = yaml.safe_load(file)
+                config: dict[str, Any] = yaml.safe_load(file)
                 logging.info(
                     f"Configuration loaded successfully from {self.config_path}"
                 )
@@ -67,7 +67,7 @@ class EddyProBatchProcessor:
             logging.exception("Error parsing the configuration file")
             sys.exit(1)
 
-    def validate_config(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def validate_config(self, config: dict[str, Any] | None = None) -> None:
         """
         Validate the essential configuration parameters.
 
@@ -112,7 +112,7 @@ class EddyProBatchProcessor:
 
         # Validate metrics_interval_seconds
         metrics_interval = config.get("metrics_interval_seconds")
-        if not isinstance(metrics_interval, (int, float)) or metrics_interval <= 0:
+        if not isinstance(metrics_interval, int | float) or metrics_interval <= 0:
             logging.error(
                 "Invalid 'metrics_interval_seconds' value. "
                 "It must be a positive number."
@@ -135,7 +135,7 @@ def run_subprocess_with_monitoring(
     working_dir: Path,
     stream_output: bool = True,
     metrics_interval: float = 0.5,
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
     scenario_suffix: str = "",
 ) -> int:
     """
@@ -318,7 +318,7 @@ def validate_config(config: dict) -> None:
 
 
 def generate_run_report(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     site_id: str,
     years_processed: list,
     output_base_dir: Path,
@@ -428,7 +428,7 @@ def run_single_scenario(
     stream_output: bool,
     metrics_interval: float,
     dry_run: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Execute a single scenario with patched parameters.
 
@@ -541,14 +541,14 @@ def run_single_scenario(
 
 
 def run_scenario_batch(
-    scenario_list: List[Scenario],
+    scenario_list: list[Scenario],
     template_path: Path,
     output_base_dir: Path,
     eddypro_executable: Path,
     stream_output: bool,
     metrics_interval: float,
     dry_run: bool = False,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Execute a batch of scenarios sequentially.
 

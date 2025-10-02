@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any
 
 try:
     import psutil
@@ -37,7 +37,7 @@ class PerformanceMonitor:
     def __init__(
         self,
         interval_seconds: float = 0.5,
-        output_dir: Optional[Union[str, Path]] = None,
+        output_dir: str | Path | None = None,
         scenario_suffix: str = "",
     ):
         """
@@ -63,13 +63,13 @@ class PerformanceMonitor:
 
         # Monitoring state
         self._monitoring = False
-        self._monitor_thread: Optional[threading.Thread] = None
-        self._start_time: Optional[float] = None
-        self._end_time: Optional[float] = None
+        self._monitor_thread: threading.Thread | None = None
+        self._start_time: float | None = None
+        self._end_time: float | None = None
 
         # Data storage
-        self._samples: List[Dict[str, Any]] = []
-        self._process: Optional[psutil.Process] = None
+        self._samples: list[dict[str, Any]] = []
+        self._process: psutil.Process | None = None
 
         # Output file paths
         self._metrics_csv_path = self._get_output_path("metrics.csv")
@@ -82,7 +82,7 @@ class PerformanceMonitor:
             filename = f"{name}_{self.scenario_suffix}.{ext}"
         return self.output_dir / filename
 
-    def start_monitoring(self, process_pid: Optional[int] = None) -> None:
+    def start_monitoring(self, process_pid: int | None = None) -> None:
         """
         Start performance monitoring.
 
@@ -122,7 +122,7 @@ class PerformanceMonitor:
             f"process: {process_pid or 'system'})"
         )
 
-    def stop_monitoring(self) -> Dict[str, Any]:
+    def stop_monitoring(self) -> dict[str, Any]:
         """
         Stop performance monitoring and return summary.
 
@@ -167,7 +167,7 @@ class PerformanceMonitor:
 
             time.sleep(self.interval_seconds)
 
-    def _collect_sample(self) -> Optional[Dict[str, Any]]:
+    def _collect_sample(self) -> dict[str, Any] | None:
         """
         Collect a single performance sample.
 
@@ -196,7 +196,7 @@ class PerformanceMonitor:
         else:
             return sample
 
-    def _collect_system_metrics(self) -> Dict[str, Any]:
+    def _collect_system_metrics(self) -> dict[str, Any]:
         """Collect system-wide performance metrics."""
         metrics = {}
 
@@ -233,7 +233,7 @@ class PerformanceMonitor:
 
         return metrics
 
-    def _collect_process_metrics(self) -> Optional[Dict[str, Any]]:
+    def _collect_process_metrics(self) -> dict[str, Any] | None:
         """Collect process-specific performance metrics."""
         if not self._process:
             return None
@@ -283,7 +283,7 @@ class PerformanceMonitor:
         else:
             return metrics
 
-    def _generate_summary(self) -> Dict[str, Any]:
+    def _generate_summary(self) -> dict[str, Any]:
         """Generate summary statistics from collected samples."""
         if not self._samples:
             return {"error": "No samples collected"}
@@ -309,7 +309,7 @@ class PerformanceMonitor:
 
         # Calculate statistics for each numeric metric
         numeric_fields = self._get_numeric_fields()
-        metrics_dict: Dict[str, Dict[str, float]] = {}
+        metrics_dict: dict[str, dict[str, float]] = {}
         for field in numeric_fields:
             values = [
                 s[field] for s in self._samples if field in s and s[field] is not None
@@ -320,7 +320,7 @@ class PerformanceMonitor:
 
         return summary
 
-    def _get_numeric_fields(self) -> List[str]:
+    def _get_numeric_fields(self) -> list[str]:
         """Get list of numeric field names from samples."""
         if not self._samples:
             return []
@@ -329,12 +329,12 @@ class PerformanceMonitor:
         for key, value in self._samples[0].items():
             if key in ["timestamp", "relative_time"]:
                 continue
-            if isinstance(value, (int, float)):
+            if isinstance(value, int | float):
                 numeric_fields.append(key)
 
         return numeric_fields
 
-    def _calculate_stats(self, values: List[Union[int, float]]) -> Dict[str, float]:
+    def _calculate_stats(self, values: list[int | float]) -> dict[str, float]:
         """Calculate min, max, mean, and percentiles for a list of values."""
         if not values:
             return {}
@@ -357,7 +357,7 @@ class PerformanceMonitor:
 
         return stats
 
-    def _percentile(self, values: List[Union[int, float]], p: float) -> float:
+    def _percentile(self, values: list[int | float], p: float) -> float:
         """Calculate percentile from sorted values."""
         if not values:
             return 0.0
@@ -382,7 +382,7 @@ class PerformanceMonitor:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
             # Get all possible field names
-            all_fields: Set[str] = set()
+            all_fields: set[str] = set()
             for sample in self._samples:
                 all_fields.update(sample.keys())
 
@@ -403,7 +403,7 @@ class PerformanceMonitor:
         except Exception:
             logger.exception("Failed to write metrics CSV")
 
-    def _write_summary_json(self, summary: Dict[str, Any]) -> None:
+    def _write_summary_json(self, summary: dict[str, Any]) -> None:
         """Write summary statistics to JSON file."""
         try:
             # Ensure output directory exists
@@ -440,9 +440,9 @@ class PerformanceMonitor:
 
 def create_monitor(
     interval_seconds: float = 0.5,
-    output_dir: Optional[Union[str, Path]] = None,
+    output_dir: str | Path | None = None,
     scenario_suffix: str = "",
-) -> Optional[PerformanceMonitor]:
+) -> PerformanceMonitor | None:
     """
     Create a performance monitor instance with error handling.
 
@@ -487,16 +487,16 @@ class MonitoredOperation:
     def __init__(
         self,
         interval_seconds: float = 0.5,
-        output_dir: Optional[Union[str, Path]] = None,
+        output_dir: str | Path | None = None,
         scenario_suffix: str = "",
-        process_pid: Optional[int] = None,
+        process_pid: int | None = None,
     ):
         """Initialize monitored operation context."""
         self.monitor = create_monitor(interval_seconds, output_dir, scenario_suffix)
         self.process_pid = process_pid
-        self.summary: Dict[str, Any] = {}
+        self.summary: dict[str, Any] = {}
 
-    def __enter__(self) -> Optional[PerformanceMonitor]:
+    def __enter__(self) -> PerformanceMonitor | None:
         """Enter monitoring context."""
         if self.monitor:
             self.monitor.start_monitoring(self.process_pid)

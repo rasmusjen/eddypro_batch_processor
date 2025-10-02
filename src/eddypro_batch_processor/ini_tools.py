@@ -9,12 +9,12 @@ Supports patching specific parameters while preserving the rest of the template.
 import configparser
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Parameter validation rules
-PARAMETER_VALIDATION: Dict[str, Dict[str, Any]] = {
+PARAMETER_VALIDATION: dict[str, dict[str, Any]] = {
     "rot_meth": {
         "section": "RawProcess_Settings",
         "allowed_values": {1, 3},
@@ -75,7 +75,7 @@ def validate_parameter(param_name: str, value: Any) -> int:
 
     # Check if value is in allowed set
     validation_info = PARAMETER_VALIDATION[param_name]
-    allowed_values: Set[int] = validation_info["allowed_values"]
+    allowed_values: set[int] = validation_info["allowed_values"]
     if int_value not in allowed_values:
         allowed = sorted(allowed_values)
         description = validation_info["description"]
@@ -87,7 +87,7 @@ def validate_parameter(param_name: str, value: Any) -> int:
     return int_value
 
 
-def validate_parameters(parameters: Dict[str, Any]) -> Dict[str, int]:
+def validate_parameters(parameters: dict[str, Any]) -> dict[str, int]:
     """
     Validate a dictionary of parameters.
 
@@ -138,7 +138,7 @@ def read_ini_template(template_path: Path) -> configparser.ConfigParser:
 
 
 def patch_ini_parameters(
-    config: configparser.ConfigParser, parameters: Dict[str, int]
+    config: configparser.ConfigParser, parameters: dict[str, int]
 ) -> None:
     """
     Patch INI configuration with validated parameters.
@@ -190,7 +190,7 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
 
 
 def create_patched_ini(
-    template_path: Path, output_path: Path, parameters: Optional[Dict[str, Any]] = None
+    template_path: Path, output_path: Path, parameters: dict[str, Any] | None = None
 ) -> None:
     """
     Create a patched INI file from template with parameter overrides.
@@ -222,7 +222,7 @@ def create_patched_ini(
     logger.info(f"Created patched INI file: {output_path}")
 
 
-def get_parameter_info() -> Dict[str, Dict[str, Any]]:
+def get_parameter_info() -> dict[str, dict[str, Any]]:
     """
     Get information about all supported parameters.
 
@@ -232,7 +232,7 @@ def get_parameter_info() -> Dict[str, Dict[str, Any]]:
     return PARAMETER_VALIDATION.copy()
 
 
-def generate_scenario_suffix(parameters: Dict[str, int]) -> str:
+def generate_scenario_suffix(parameters: dict[str, int]) -> str:
     """
     Generate a deterministic suffix for scenario identification.
 
