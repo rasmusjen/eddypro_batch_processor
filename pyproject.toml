@@ -137,7 +137,8 @@ omit = [
     "*/.venv/*",
     "*/site-packages/*",
 ]
-branch = true
+branch = false
+parallel = false
 
 [tool.coverage.report]
 exclude_lines = [

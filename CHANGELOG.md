@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Milestone 8: End-to-End Integration Tests** - Comprehensive dry-run integration testing
+  - New `test_e2e_integration.py` module with full pipeline integration tests
+  - End-to-end tests for dry-run mode verifying:
+    - Single and multiple scenario execution
+    - Project file (.eddypro) generation with parameter overrides
+    - Reports directory creation and manifest generation
+    - Scenario cap enforcement (32 combinations limit)
+    - HTML report generation with proper content
+    - CLI command help and validation workflows
+  - Integration tests exercise full pipeline: CLI → config → INI → scenarios → reporting
+  - All tests use mocked EddyPro executables and temporary directories for isolation
+  - Tests validate manifest structure, scenario naming, and output artifacts
+  - 13 comprehensive integration tests covering all major user workflows
+  - All tests deterministic with no external dependencies or network calls
+
+### Changed
+
+- Integration tests use subprocess.run with check=False for proper error handling
+- Test fixtures provide complete mock environment (config, ECMD, templates, executables)
+
+### Technical
+
+- All integration tests pass black, ruff, mypy checks
+- Tests verify CLI exit codes and error messages
+- Proper cleanup with pytest fixtures and temporary paths
+- Tests document expected behavior for dry-run mode
+- Full coverage of CLI subcommands: run, scenarios, validate, status
+
 - **Milestone 7: Validation Command and Documentation** - Complete validation system and comprehensive user documentation
   - New `validation.py` module with comprehensive validation functions:
     - `validate_config_structure()` - checks required keys and types
