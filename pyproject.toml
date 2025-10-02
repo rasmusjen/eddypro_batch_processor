@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "eddypro-batch-processor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automated EddyPro processing with scenario support and performance monitoring"
 authors = [{name = "Rasmus Jensen", email = "raje@ecos.au.dk"}]
 readme = "README.md"

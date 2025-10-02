@@ -17,7 +17,7 @@ This document provides guidelines for contributing to the EddyPro Batch Processo
 
 ### Prerequisites
 
-- Python 3.12 or higher
+- Python 3.8 or higher (Python 3.12+ recommended for development)
 - Git
 - Virtual environment (recommended)
 

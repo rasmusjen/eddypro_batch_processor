@@ -16,7 +16,7 @@ A Python CLI tool for automated EddyPro processing with scenario support, perfor
 
 ### Requirements
 
-- Python 3.12 or higher
+- Python 3.8 or higher (Python 3.12+ recommended for development)
 - [EddyPro](https://www.licor.com/env/products/eddy_covariance/eddypro.html) installed
 - Python packages: `pyyaml`, `psutil`, `plotly` (optional for charts)
 
@@ -37,7 +37,10 @@ A Python CLI tool for automated EddyPro processing with scenario support, perfor
    ```
 
 3. Configure the application:
-   - Copy and edit `config/config.yaml` with your paths and settings
+   ```bash
+   cp config/config.yaml.example config/config.yaml
+   # Edit config/config.yaml with your paths and settings
+   ```
    - Ensure your ECMD metadata file is accessible
 
 ### Basic Usage
