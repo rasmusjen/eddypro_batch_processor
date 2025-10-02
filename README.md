@@ -17,31 +17,100 @@ A Python CLI tool for automated EddyPro processing with scenario support, perfor
 ### Requirements
 
 - Python 3.8 or higher (Python 3.12+ recommended for development)
-- [EddyPro](https://www.licor.com/env/products/eddy_covariance/eddypro.html) installed
+- [EddyPro](https://www.licor.com/env/products/eddy_covariance/eddypro.html) installed and accessible
 - Python packages: `pyyaml`, `psutil`, `plotly` (optional for charts)
 
 ### Installation
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd eddypro_batch_processor
-   ```
+#### 1. Install EddyPro (Prerequisite)
 
-2. Create virtual environment and install:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # or venv\Scripts\activate on Windows
-   pip install -r requirements.txt
-   pip install -e .
-   ```
+Download and install EddyPro from [LI-COR's website](https://www.licor.com/env/products/eddy_covariance/eddypro.html):
 
-3. Configure the application:
-   ```bash
-   cp config/config.yaml.example config/config.yaml
-   # Edit config/config.yaml with your paths and settings
-   ```
-   - Ensure your ECMD metadata file is accessible
+- **Windows**: Install to default location (`C:\Program Files\LI-COR\EddyPro-X.X.X\`)
+- **Linux/macOS**: Install according to LI-COR instructions
+- **Note the installation path** - you'll need it for configuration
+
+#### 2. Clone and Setup Python Environment
+
+```bash
+git clone <repository-url>
+cd eddypro_batch_processor
+```
+
+Create virtual environment and install:
+```bash
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+pip install -e .
+```
+
+#### 3. Configure the Application
+
+```bash
+cp config/config.yaml.example config/config.yaml
+# Edit config/config.yaml with your paths and settings
+```
+
+**Key configuration items:**
+- Set `eddypro_executable` to your EddyPro installation path
+- Update `input_dir_pattern` and `output_dir_pattern` for your data structure
+- Specify `ecmd_file` path for your site metadata
+- Ensure your ECMD metadata file is accessible
+
+#### 4. Verify Installation
+
+Test that everything is working:
+```bash
+# Check CLI is installed
+eddypro-batch --help
+
+# Verify version
+eddypro-batch --version
+
+# Validate your configuration
+eddypro-batch validate --config config/config.yaml
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+**EddyPro executable not found:**
+```
+Error: EddyPro executable not found at: <path>
+```
+**Solution:** Check the `eddypro_executable` path in `config.yaml`. Common locations:
+- Windows: `C:\Program Files\LI-COR\EddyPro-7.0.9\bin\eddypro_rp.exe`
+- Linux: `/opt/eddypro/bin/eddypro_rp`
+- macOS: `/Applications/EddyPro.app/Contents/MacOS/eddypro_rp`
+
+**Missing Plotly (charts disabled):**
+```
+Warning: Plotly not available, charts disabled
+```
+**Solution:** Install optional dependencies:
+```bash
+pip install plotly
+```
+
+**ECMD file validation errors:**
+```
+Error: Missing required columns in ECMD file
+```
+**Solution:** See [CONFIG.md](docs/CONFIG.md) for ECMD format requirements. Ensure your CSV has required columns: `filename`, `date`, `time`, `DOY`, etc.
+
+**Permission errors on Windows:**
+```
+PermissionError: [Errno 13] Permission denied
+```
+**Solution:** Run terminal as Administrator, or ensure EddyPro installation directory is accessible.
+
+#### Getting Help
+
+- **Configuration issues**: See [CONFIG.md](docs/CONFIG.md)
+- **Usage examples**: See [USAGE.md](docs/USAGE.md)
+- **Development setup**: See [DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
 ### Basic Usage
 

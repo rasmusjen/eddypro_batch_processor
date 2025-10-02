@@ -359,37 +359,37 @@ Milestone 8: End-to-end dry-run (integration)
 Milestone 9: CLI Implementation – Complete Full Pipeline
 
 - Tasks
-  - [ ] Implement `cmd_run()` in `cli.py` to orchestrate the full processing pipeline
-    - [ ] Parse CLI arguments and merge with config file settings
-    - [ ] Initialize logging and monitoring (if enabled)
-    - [ ] Generate project files using `ini_tools.py` with parameter overrides
-    - [ ] Execute EddyPro processing (respect `--dry-run` flag)
-    - [ ] Capture metrics and write manifest/reports
-    - [ ] Handle errors gracefully with proper exit codes
-  - [ ] Implement `cmd_scenarios()` in `cli.py` for scenario matrix execution
-    - [ ] Generate Cartesian product of parameter combinations
-    - [ ] Validate scenario cap (≤32 combinations)
-    - [ ] Execute each scenario with deterministic naming (suffixes)
-    - [ ] Aggregate results into consolidated manifest and report
-  - [ ] Implement `cmd_status()` in `cli.py` to read and display last run manifest
-    - [ ] Parse and pretty-print manifest JSON
-    - [ ] Show run summary, scenario table, and key metrics
-    - [ ] Handle missing/corrupt manifest files gracefully
-  - [ ] Remove `@pytest.mark.xfail` decorators from integration tests
-  - [ ] Update integration tests to verify actual outputs (not just CLI invocation)
-  - [ ] Add error handling tests for edge cases (missing files, invalid params, etc.)
+  - [x] Implement `cmd_run()` in `cli.py` to orchestrate the full processing pipeline
+    - [x] Parse CLI arguments and merge with config file settings
+    - [x] Initialize logging and monitoring (if enabled)
+    - [x] Generate project files using `ini_tools.py` with parameter overrides
+    - [x] Execute EddyPro processing (respect `--dry-run` flag)
+    - [x] Capture metrics and write manifest/reports
+    - [x] Handle errors gracefully with proper exit codes
+  - [x] Implement `cmd_scenarios()` in `cli.py` for scenario matrix execution
+    - [x] Generate Cartesian product of parameter combinations
+    - [x] Validate scenario cap (≤32 combinations)
+    - [x] Execute each scenario with deterministic naming (suffixes)
+    - [x] Aggregate results into consolidated manifest and report
+  - [x] Implement `cmd_status()` in `cli.py` to read and display last run manifest
+    - [x] Parse and pretty-print manifest JSON
+    - [x] Show run summary, scenario table, and key metrics
+    - [x] Handle missing/corrupt manifest files gracefully
+  - [x] Remove `@pytest.mark.xfail` decorators from integration tests
+  - [x] Update integration tests to verify actual outputs (not just CLI invocation)
+  - [x] Add error handling tests for edge cases (missing files, invalid params, etc.)
 - Deliverables
-  - [ ] Fully implemented `cmd_run()`, `cmd_scenarios()`, and `cmd_status()` functions
-  - [ ] All 10 integration tests pass without xfail markers
-  - [ ] Error scenarios tested (invalid config, missing files, exceeded cap)
-  - [ ] Updated documentation with real-world usage examples
+  - [x] Fully implemented `cmd_run()`, `cmd_scenarios()`, and `cmd_status()` functions
+  - [x] All 10 integration tests pass without xfail markers
+  - [x] Error scenarios tested (invalid config, missing files, exceeded cap)
+  - [x] Updated documentation with real-world usage examples
 - Definition of Done
-  - [ ] `eddypro-batch run --config ... --dry-run` executes full pipeline and generates reports
-  - [ ] `eddypro-batch scenarios --rot-meth 1 3 --tlag-meth 2 4 --dry-run` creates 4 scenarios with proper naming
-  - [ ] `eddypro-batch status` displays last run summary from manifest
-  - [ ] All integration tests pass (147+ passed, 0 xfailed, coverage ≥70%)
-  - [ ] CI pipeline passes on all Python versions (3.8-3.12)
-  - [ ] Code quality checks pass (ruff, black, mypy, bandit)
+  - [x] `eddypro-batch run --config ... --dry-run` executes full pipeline and generates reports
+  - [x] `eddypro-batch scenarios --rot-meth 1 3 --tlag-meth 2 4 --dry-run` creates 4 scenarios with proper naming
+  - [x] `eddypro-batch status` displays last run summary from manifest
+  - [x] All integration tests pass (153 passed, 0 xfailed, coverage ≥70%)
+  - [x] CI pipeline passes on all Python versions (3.8-3.12)
+  - [x] Code quality checks pass (ruff, black, mypy, bandit)
 
 Note: Milestone order is optimized for testability and incremental value; each milestone should leave the repo in a usable state.
 
