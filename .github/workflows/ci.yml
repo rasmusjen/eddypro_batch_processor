@@ -58,6 +58,9 @@ jobs:
         name: bandit-report-${{ matrix.python-version }}
         path: bandit-report.json
 
+    - name: Clean up old coverage data
+      run: rm -f .coverage .coverage.*
+
     - name: Run tests with coverage
       run: pytest --cov-fail-under=70
 
