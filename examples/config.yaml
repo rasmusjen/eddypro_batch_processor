@@ -1,0 +1,30 @@
+# Example Configuration for EddyPro Batch Processor
+# Copy this file to config/config.yaml and customize for your environment
+
+# EddyPro executable path (update for your installation)
+eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
+
+# Site and year selection
+site_id: test-site
+years_to_process:
+  - 2023
+
+# Directory patterns (use {site_id} and {year} placeholders)
+input_dir_pattern: "data/raw/{site_id}/{year}"
+output_dir_pattern: "data/processed/{site_id}/{year}"
+
+# ECMD metadata file path
+ecmd_file: "data/{site_id}_ecmd.csv"
+
+# Processing options
+multiprocessing: false  # Set to true for parallel processing
+max_processes: 4       # Adjust based on your CPU cores
+stream_output: true    # Show EddyPro output during processing
+
+# Logging and monitoring
+log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+metrics_interval_seconds: 0.5
+
+# Reporting
+reports_dir: null      # Optional: Custom reports directory
+report_charts: plotly  # Chart engine: plotly, svg, or none
