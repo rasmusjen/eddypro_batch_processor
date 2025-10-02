@@ -42,7 +42,7 @@ def test_cli_subcommands_help():
 
 
 def test_cli_validate_stub():
-    """Test that validate command runs successfully as a stub."""
+    """Test that validate command runs successfully with skip options."""
     # Create a minimal config for testing
     config_content = """
 eddypro_executable: "dummy_path"
@@ -55,6 +55,9 @@ stream_output: false
 log_level: "INFO"
 multiprocessing: false
 max_processes: 1
+metrics_interval_seconds: 60
+reports_dir: "dummy_reports"
+report_charts: "none"
 """
 
     # Write temporary config
@@ -70,6 +73,8 @@ max_processes: 1
                 "--config",
                 str(test_config),
                 "validate",
+                "--skip-paths",
+                "--skip-ecmd",
             ],
             check=False,
             capture_output=True,
@@ -77,7 +82,7 @@ max_processes: 1
         )
 
         assert result.returncode == 0
-        assert "Validate command - stub implementation" in result.stdout
+        assert "[PASS] All validations passed!" in result.stdout
 
     finally:
         # Clean up

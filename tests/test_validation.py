@@ -558,7 +558,7 @@ class TestFormatValidationReport:
         }
         report = validation.format_validation_report(results)
         assert "All validations passed" in report
-        assert "✓" in report
+        assert "[PASS]" in report
 
     def test_format_report_with_errors(self):
         """Test report formatting with errors."""
@@ -571,6 +571,6 @@ class TestFormatValidationReport:
         }
         report = validation.format_validation_report(results)
         assert "Total errors: 2" in report
-        assert "❌" in report
+        assert "[FAIL]" in report
         assert "Missing key: site_id" in report
         assert "EddyPro executable not found" in report

@@ -396,10 +396,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
     total_errors = sum(len(errors) for errors in results.values())
 
     if total_errors == 0:
-        logging.info("✓ Validation passed successfully")
+        logging.info("[PASS] Validation passed successfully")
         return 0
     else:
-        logging.error(f"✗ Validation failed with {total_errors} error(s)")
+        logging.error(f"[FAIL] Validation failed with {total_errors} error(s)")
         return 1
 
 

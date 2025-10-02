@@ -505,22 +505,22 @@ def format_validation_report(results: Dict[str, List[str]]) -> str:
     for category, errors in results.items():
         category_name = category.replace("_", " ").title()
         if errors:
-            lines.append(f"❌ {category_name}: {len(errors)} error(s)")
+            lines.append(f"[FAIL] {category_name}: {len(errors)} error(s)")
             for error in errors:
                 # Indent multi-line errors
                 error_lines = error.split("\n")
-                lines.append(f"   • {error_lines[0]}")
+                lines.append(f"   - {error_lines[0]}")
                 for line in error_lines[1:]:
                     lines.append(f"     {line}")
             lines.append("")
         else:
-            lines.append(f"✓ {category_name}: OK")
+            lines.append(f"[PASS] {category_name}: OK")
 
     lines.append("")
     lines.append("=" * 60)
     if total_errors == 0:
-        lines.append("✓ All validations passed!")
+        lines.append("[PASS] All validations passed!")
     else:
-        lines.append(f"❌ Total errors: {total_errors}")
+        lines.append(f"[FAIL] Total errors: {total_errors}")
 
     return "\n".join(lines)
