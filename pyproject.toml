@@ -138,6 +138,7 @@ omit = [
     "*/site-packages/*",
 ]
 branch = true
+parallel = false
 
 [tool.coverage.report]
 exclude_lines = [
