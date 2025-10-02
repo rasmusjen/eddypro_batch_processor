@@ -7,9 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### ⚠️ BREAKING CHANGES
 
-- Nothing yet
+- **Minimum Python version increased to 3.10**
+  - Python 3.8 and 3.9 are no longer supported (Python 3.8 reached EOL in October 2024)
+  - Added Python 3.13 support
+  - CI now tests on Python 3.10, 3.11, 3.12, and 3.13
+
+### Changed
+
+- Updated minimum Python requirement from 3.8 to 3.10
+- Updated all tool configurations (black, ruff, mypy) to target Python 3.10
+- Updated documentation to reflect Python 3.10+ requirement
+
+### Migration Guide
+
+Users on Python 3.8 or 3.9 should:
+
+1. **Upgrade Python** to 3.10 or higher:
+   ```bash
+   # Using conda/mamba
+   conda install python=3.10  # or 3.11, 3.12, 3.13
+
+   # Or download from python.org
+   # https://www.python.org/downloads/
+   ```
+
+2. **Reinstall package**:
+   ```bash
+   pip install --upgrade eddypro-batch-processor
+   ```
+
+3. **Test your workflows**:
+   ```bash
+   eddypro-batch --version
+   eddypro-batch validate --config config/config.yaml
+   ```
+
+**Note**: Version 0.2.x will continue to support Python 3.8+ for critical security fixes only.
 
 ## [0.2.0] - 2025-10-02
 

@@ -13,7 +13,7 @@ import platform
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import psutil
 import yaml
@@ -59,14 +59,14 @@ def compute_file_checksum(file_path: Path, algorithm: str = "sha256") -> str:
     return hash_obj.hexdigest()
 
 
-def get_python_environment_info() -> Dict[str, Any]:
+def get_python_environment_info() -> dict[str, Any]:
     """
     Capture Python environment information.
 
     Returns:
         Dictionary with Python version, platform, and key package versions
     """
-    env_info: Dict[str, Any] = {
+    env_info: dict[str, Any] = {
         "python_version": sys.version,
         "platform": platform.platform(),
         "platform_system": platform.system(),
@@ -75,7 +75,7 @@ def get_python_environment_info() -> Dict[str, Any]:
     }
 
     # Capture versions of key packages
-    package_versions: Dict[str, str] = {}
+    package_versions: dict[str, str] = {}
     try:
         package_versions["PyYAML"] = getattr(yaml, "__version__", "unknown")
     except AttributeError:
@@ -103,15 +103,15 @@ def get_python_environment_info() -> Dict[str, Any]:
 
 def generate_scenario_manifest(
     scenario_name: str,
-    scenario_params: Dict[str, Any],
+    scenario_params: dict[str, Any],
     project_file: Path,
     output_dir: Path,
     start_time: datetime,
     end_time: datetime,
     success: bool,
-    metrics_summary: Optional[Dict[str, Any]] = None,
-    error_message: Optional[str] = None,
-) -> Dict[str, Any]:
+    metrics_summary: dict[str, Any] | None = None,
+    error_message: str | None = None,
+) -> dict[str, Any]:
     """
     Generate a manifest for a single scenario run.
 
@@ -151,7 +151,7 @@ def generate_scenario_manifest(
     return manifest
 
 
-def write_scenario_manifest(manifest: Dict[str, Any], output_path: Path) -> None:
+def write_scenario_manifest(manifest: dict[str, Any], output_path: Path) -> None:
     """
     Write scenario manifest to JSON file.
 
@@ -169,17 +169,17 @@ def write_scenario_manifest(manifest: Dict[str, Any], output_path: Path) -> None
 
 def generate_run_manifest(
     run_id: str,
-    config: Dict[str, Any],
+    config: dict[str, Any],
     config_checksum: str,
     site_id: str,
-    years_processed: List[int],
-    scenarios: List[Dict[str, Any]],
+    years_processed: list[int],
+    scenarios: list[dict[str, Any]],
     start_time: datetime,
     end_time: datetime,
     overall_success: bool,
-    output_dirs: List[Path],
-    provenance: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    output_dirs: list[Path],
+    provenance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     Generate a run-level manifest capturing all scenarios and metadata.
 
@@ -224,7 +224,7 @@ def generate_run_manifest(
     return manifest
 
 
-def write_run_manifest(manifest: Dict[str, Any], output_path: Path) -> None:
+def write_run_manifest(manifest: dict[str, Any], output_path: Path) -> None:
     """
     Write run manifest to JSON file.
 
@@ -241,7 +241,7 @@ def write_run_manifest(manifest: Dict[str, Any], output_path: Path) -> None:
         logger.exception(f"Failed to write run manifest to {output_path}")
 
 
-def load_metrics_from_csv(metrics_csv_path: Path) -> List[Dict[str, Any]]:
+def load_metrics_from_csv(metrics_csv_path: Path) -> list[dict[str, Any]]:
     """
     Load performance metrics from CSV file.
 
@@ -271,8 +271,8 @@ def load_metrics_from_csv(metrics_csv_path: Path) -> List[Dict[str, Any]]:
 
 
 def generate_plotly_charts(
-    metrics: List[Dict[str, Any]], scenario_name: str = "Run"
-) -> Optional[str]:
+    metrics: list[dict[str, Any]], scenario_name: str = "Run"
+) -> str | None:
     """
     Generate interactive Plotly charts from metrics data.
 
@@ -377,10 +377,10 @@ def generate_plotly_charts(
 
 
 def generate_html_report(
-    run_manifest: Dict[str, Any],
-    scenario_metrics: Optional[Dict[str, List[Dict[str, Any]]]] = None,
+    run_manifest: dict[str, Any],
+    scenario_metrics: dict[str, list[dict[str, Any]]] | None = None,
     chart_engine: str = "plotly",
-    output_path: Optional[Path] = None,
+    output_path: Path | None = None,
 ) -> str:
     """
     Generate an HTML report from run manifest and metrics.

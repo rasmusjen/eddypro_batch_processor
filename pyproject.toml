@@ -4,23 +4,22 @@ build-backend = "hatchling.build"
 
 [project]
 name = "eddypro-batch-processor"
-version = "0.2.0"
+version = "0.3.0"
 description = "Automated EddyPro processing with scenario support and performance monitoring"
 authors = [{name = "Rasmus Jensen", email = "raje@ecos.au.dk"}]
 readme = "README.md"
 license = {text = "GNU GPLv3"}
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Atmospheric Science",
 ]
 dependencies = [
@@ -62,12 +61,12 @@ packages = ["src/eddypro_batch_processor"]
 
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py310"]
 skip-string-normalization = false
 
 [tool.ruff]
 line-length = 88
-target-version = "py38"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "TRY", "PL"]
@@ -88,7 +87,7 @@ ignore = [
 known-first-party = ["eddypro_batch_processor"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false  # Gradual typing as per instructions

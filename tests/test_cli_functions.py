@@ -199,9 +199,12 @@ report_charts: none
             metrics_interval=0.5,
         )
 
-        with patch("eddypro_batch_processor.cli.logging") as mock_logging, patch(
-            "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
-        ) as mock_processor_class:
+        with (
+            patch("eddypro_batch_processor.cli.logging") as mock_logging,
+            patch(
+                "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+            ) as mock_processor_class,
+        ):
             # Mock config loading to avoid file system dependencies
             mock_processor = mock_processor_class.return_value
             mock_processor.load_config.return_value = {
@@ -237,13 +240,17 @@ report_charts: none
         )
 
         # Mock the core functions and validation to control test outcome
-        with patch(
-            "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
-        ) as mock_proc, patch(
-            "eddypro_batch_processor.cli.validation.validate_all"
-        ) as mock_validate, patch(
-            "eddypro_batch_processor.cli.validation.format_validation_report"
-        ) as mock_format:
+        with (
+            patch(
+                "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+            ) as mock_proc,
+            patch(
+                "eddypro_batch_processor.cli.validation.validate_all"
+            ) as mock_validate,
+            patch(
+                "eddypro_batch_processor.cli.validation.format_validation_report"
+            ) as mock_format,
+        ):
             # Setup mocks
             mock_instance = mock_proc.return_value
             mock_instance.load_config.return_value = {"test": "config"}
@@ -273,13 +280,17 @@ report_charts: none
         )
 
         # Mock the core functions and validation to control test outcome
-        with patch(
-            "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
-        ) as mock_proc, patch(
-            "eddypro_batch_processor.cli.validation.validate_all"
-        ) as mock_validate, patch(
-            "eddypro_batch_processor.cli.validation.format_validation_report"
-        ) as mock_format:
+        with (
+            patch(
+                "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+            ) as mock_proc,
+            patch(
+                "eddypro_batch_processor.cli.validation.validate_all"
+            ) as mock_validate,
+            patch(
+                "eddypro_batch_processor.cli.validation.format_validation_report"
+            ) as mock_format,
+        ):
             # Setup mocks
             mock_instance = mock_proc.return_value
             mock_instance.load_config.return_value = {"test": "config"}

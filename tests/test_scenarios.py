@@ -6,7 +6,6 @@ Tests scenario generation, Cartesian product, naming, and cap enforcement.
 """
 
 import unittest
-from typing import Dict, List
 
 from src.eddypro_batch_processor import scenarios
 
@@ -46,7 +45,7 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
 
     def test_empty_parameters(self):
         """Test suffix generation with empty parameters."""
-        params: Dict[str, int] = {}
+        params: dict[str, int] = {}
         suffix = scenarios.generate_scenario_suffix(params)
         self.assertEqual(suffix, "")
 
@@ -129,7 +128,7 @@ class TestScenarioGeneration(unittest.TestCase):
 
         # Should produce identical results
         self.assertEqual(len(scenarios1), len(scenarios2))
-        for s1, s2 in zip(scenarios1, scenarios2):
+        for s1, s2 in zip(scenarios1, scenarios2, strict=False):
             self.assertEqual(s1.parameters, s2.parameters)
             self.assertEqual(s1.suffix, s2.suffix)
             self.assertEqual(s1.index, s2.index)
@@ -196,7 +195,7 @@ class TestScenarioValidation(unittest.TestCase):
 
     def test_empty_parameter_options_error(self):
         """Test that empty parameter options raises error."""
-        opts: Dict[str, List[int]] = {}
+        opts: dict[str, list[int]] = {}
 
         with self.assertRaises(ValueError) as context:
             scenarios.generate_scenarios(opts)
@@ -298,7 +297,7 @@ class TestScenarioSummaryFormatting(unittest.TestCase):
 
     def test_format_empty_scenarios(self):
         """Test formatting empty scenario list."""
-        scenario_list: List[scenarios.Scenario] = []
+        scenario_list: list[scenarios.Scenario] = []
         summary = scenarios.format_scenario_summary(scenario_list)
 
         self.assertIn("no scenarios", summary.lower())

@@ -357,7 +357,7 @@ The architecture provides several extension points for future enhancements:
 ### Core Dependencies
 
 - **PyYAML**: Configuration file parsing
-- **Python 3.8+**: Language runtime
+- **Python 3.10+**: Language runtime
 
 ### Optional Dependencies
 
