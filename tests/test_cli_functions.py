@@ -141,12 +141,9 @@ class TestCLICommandFunctions:
             metrics_interval=0.5,
         )
 
-        with (
-            patch("eddypro_batch_processor.cli.logging") as mock_logging,
-            patch(
-                "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
-            ) as mock_processor_class,
-        ):
+        with patch("eddypro_batch_processor.cli.logging") as mock_logging, patch(
+            "eddypro_batch_processor.cli.core.EddyProBatchProcessor"
+        ) as mock_processor_class:
             # Mock config loading to avoid file system dependencies
             mock_processor = mock_processor_class.return_value
             mock_processor.load_config.return_value = {
