@@ -505,10 +505,26 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
             continue
 
         # Template project file path (from config or default)
-        template_path = Path(config.get("project_template", ""))
+        default_template = "config/EddyProProject_template.ini"
+        template_path = Path(config.get("project_template", default_template))
         if not template_path.exists():
-            logging.error(f"Project template not found: {template_path}")
-            return 1
+            # Try alternate locations
+            alternate_paths = [
+                Path("config/EddyProProject_template.ini"),
+                (
+                    Path(__file__).parent.parent.parent
+                    / "config"
+                    / "EddyProProject_template.ini"
+                ),
+            ]
+            for alt_path in alternate_paths:
+                if alt_path.exists():
+                    template_path = alt_path
+                    break
+
+            if not template_path.exists():
+                logging.error(f"Project template not found: {template_path}")
+                return 1
 
         # Run scenario batch
         scenario_results = core.run_scenario_batch(
@@ -748,7 +764,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         print("Performance Metrics")
         print("-" * 70)
         for key, value in metrics_summary.items():
-            if isinstance(value, (int, float)):
+            if isinstance(value, int | float):
                 print(f"{key}: {value:.2f}")
             else:
                 print(f"{key}: {value}")
