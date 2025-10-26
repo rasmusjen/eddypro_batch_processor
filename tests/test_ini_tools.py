@@ -269,6 +269,34 @@ despike_vm=0
         # Verify output file was not created
         self.assertFalse(output_path.exists())
 
+    def test_patch_ini_paths_updates_expected_fields(self):
+        """Test that patch_ini_paths updates key Project and data path fields."""
+        config = ini_tools.read_ini_template(self.template_path)
+
+        proj_file = "SITE_2021_rot1.eddypro"
+        dyn_md = "SITE_dynamic_metadata.txt"
+        data_path = "/abs/input/path"
+        out_path = "/abs/output/path/scenario_rot1"
+
+        # Ensure required sections exist in our minimal test INI by adding them
+        if not config.has_section("Project"):
+            config.add_section("Project")
+        if not config.has_section("RawProcess_General"):
+            config.add_section("RawProcess_General")
+
+        ini_tools.patch_ini_paths(
+            config,
+            proj_file=proj_file,
+            dyn_metadata_file=dyn_md,
+            data_path=data_path,
+            out_path=out_path,
+        )
+
+        self.assertEqual(config.get("Project", "proj_file"), proj_file)
+        self.assertEqual(config.get("Project", "dyn_metadata_file"), dyn_md)
+        self.assertEqual(config.get("Project", "out_path"), out_path)
+        self.assertEqual(config.get("RawProcess_General", "data_path"), data_path)
+
 
 class TestScenarioSuffixGeneration(unittest.TestCase):
     """Test scenario suffix generation functionality."""

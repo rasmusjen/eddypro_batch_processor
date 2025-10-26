@@ -189,6 +189,52 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
         raise OSError(f"Failed to write INI file {output_path}: {e}") from e
 
 
+def patch_ini_paths(
+    config: configparser.ConfigParser,
+    *,
+    proj_file: str,
+    dyn_metadata_file: str,
+    data_path: str,
+    out_path: str,
+) -> None:
+    """Patch essential path fields inside an EddyPro INI/eddypro project file.
+
+    Args:
+        config: Parsed INI configuration to modify in-place
+        proj_file: Project filename (typically the .eddypro file name)
+        dyn_metadata_file: Dynamic metadata filename (.txt) expected by EddyPro
+        data_path: Absolute path to input raw data
+        out_path: Absolute path to output directory for this run/scenario
+
+    Raises:
+        INIParameterError: If required sections are missing
+    """
+    # Validate sections
+    if not config.has_section("Project"):
+        raise INIParameterError("Required section 'Project' missing from template")
+    if not config.has_section("RawProcess_General"):
+        raise INIParameterError(
+            "Required section 'RawProcess_General' missing from template"
+        )
+
+    # Project-level paths
+    config.set("Project", "proj_file", proj_file)
+    config.set("Project", "dyn_metadata_file", dyn_metadata_file)
+    config.set("Project", "out_path", out_path)
+
+    # Input data path
+    config.set("RawProcess_General", "data_path", data_path)
+
+    logger.debug(
+        "Patched paths: Project.proj_file=%s, Project.dyn_metadata_file=%s, "
+        "Project.out_path=%s, RawProcess_General.data_path=%s",
+        proj_file,
+        dyn_metadata_file,
+        out_path,
+        data_path,
+    )
+
+
 def create_patched_ini(
     template_path: Path, output_path: Path, parameters: dict[str, Any] | None = None
 ) -> None:

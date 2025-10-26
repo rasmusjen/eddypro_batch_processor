@@ -14,7 +14,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import core, ini_tools, report, scenarios, validation
+from . import core, ecmd, ini_tools, report, scenarios, validation
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -340,18 +340,70 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         # Create output directory
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate project file with parameter overrides
+        # Generate project file with parameter overrides and patched paths
         project_file = output_dir / f"{site_id}_{year}.eddypro"
         try:
+            ini_config = ini_tools.read_ini_template(template_path)
             if ini_parameters:
-                ini_tools.create_patched_ini(
-                    template_path=template_path,
-                    output_path=project_file,
-                    parameters=ini_parameters,
-                )
-            else:
-                # Copy template without modifications
-                shutil.copy(template_path, project_file)
+                validated_params = ini_tools.validate_parameters(ini_parameters)
+                ini_tools.patch_ini_parameters(ini_config, validated_params)
+
+            # Patch path fields
+            # Input path from configured pattern
+            input_pattern = config.get("input_dir_pattern", "")
+            data_path_value = input_pattern.format(year=year, site_id=site_id)
+
+            dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
+            ini_tools.patch_ini_paths(
+                ini_config,
+                proj_file=str(project_file),
+                dyn_metadata_file=str(output_dir / dyn_metadata_filename),
+                data_path=data_path_value,
+                out_path=str(output_dir),
+            )
+
+            ini_tools.write_ini_file(ini_config, project_file)
+
+            # Materialize metadata files
+            try:
+                # Copy site-specific metadata template -> {site}.metadata
+                # (shared across years)
+                metadata_template = Path("config") / f"{site_id}_metadata_template.ini"
+                if not metadata_template.exists():
+                    # Fallback to generic template
+                    metadata_template = Path("config") / "metadata_template.ini"
+
+                if metadata_template.exists():
+                    shutil.copyfile(
+                        metadata_template, output_dir / f"{site_id}.metadata"
+                    )
+                else:
+                    logging.warning(
+                        f"No metadata template found for site {site_id}, "
+                        "skipping .metadata file generation"
+                    )
+
+                # Generate dynamic metadata from ECMD CSV (all years included)
+                ecmd_file_pattern = config.get("ecmd_file", "")
+                if "{site_id}" in ecmd_file_pattern:
+                    ecmd_file = Path(ecmd_file_pattern.format(site_id=site_id))
+                else:
+                    ecmd_file = Path(ecmd_file_pattern)
+
+                if ecmd_file.exists():
+                    ecmd.generate_dynamic_metadata(
+                        ecmd_path=ecmd_file,
+                        output_path=output_dir / dyn_metadata_filename,
+                        site_id=site_id,
+                    )
+                else:
+                    logging.warning(
+                        f"ECMD file not found at {ecmd_file}, "
+                        "skipping dynamic metadata generation"
+                    )
+
+            except Exception as meta_err:
+                logging.warning(f"Failed to materialize metadata files: {meta_err}")
 
             logging.info(f"Created project file: {project_file}")
         except Exception:
@@ -361,8 +413,12 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
 
         # Execute EddyPro (or skip in dry-run mode)
         if not dry_run:
+            # Ensure we pass the project file to EddyPro executable
+            # Use the same OS flag as core runner (-s win/linux) for consistency
+            os_suffix = "win" if sys.platform.startswith("win") else "linux"
+            command = f'"{eddypro_exe}" -s {os_suffix} "{project_file}"'
             exit_code = core.run_subprocess_with_monitoring(
-                command=str(eddypro_exe),
+                command=command,
                 working_dir=output_dir,
                 stream_output=stream_output,
                 metrics_interval=metrics_interval,
@@ -526,6 +582,16 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
                 logging.error(f"Project template not found: {template_path}")
                 return 1
 
+        # Determine ECMD file path
+        ecmd_file_pattern = config.get("ecmd_file", "")
+        if ecmd_file_pattern:
+            if "{site_id}" in ecmd_file_pattern:
+                ecmd_file_path = Path(ecmd_file_pattern.format(site_id=site_id))
+            else:
+                ecmd_file_path = Path(ecmd_file_pattern)
+        else:
+            ecmd_file_path = None
+
         # Run scenario batch
         scenario_results = core.run_scenario_batch(
             scenario_list=scenario_list,
@@ -534,6 +600,10 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
             eddypro_executable=eddypro_exe,
             stream_output=stream_output,
             metrics_interval=metrics_interval,
+            site_id=site_id,
+            year=year,
+            input_dir=input_dir,
+            ecmd_file=ecmd_file_path,
             dry_run=hasattr(args, "dry_run") and args.dry_run,
         )
 

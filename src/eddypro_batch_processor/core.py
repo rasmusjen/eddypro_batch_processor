@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from . import ini_tools, report
+from . import ecmd, ini_tools, report
 from .monitor import MonitoredOperation
 from .scenarios import Scenario
 
@@ -427,6 +427,11 @@ def run_single_scenario(
     eddypro_executable: Path,
     stream_output: bool,
     metrics_interval: float,
+    *,
+    site_id: str,
+    year: int,
+    input_dir: Path,
+    ecmd_file: Path | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """
@@ -450,9 +455,13 @@ def run_single_scenario(
     scenario_output_dir = output_base_dir / f"scenario{scenario.suffix}"
     scenario_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create patched project file with scenario suffix
-    project_filename = template_path.stem + scenario.suffix + template_path.suffix
+    # Project filename must be {site_id}_{year}_{scenario_id}.eddypro
+    project_filename = f"{site_id}_{year}_{scenario.suffix.lstrip('_')}.eddypro"
     scenario_project_file = scenario_output_dir / project_filename
+
+    # Metadata filenames (shared across years, not year-specific)
+    metadata_filename = f"{site_id}.metadata"
+    dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
 
     logging.info(
         f"Scenario {scenario.index}: Creating project file with parameters "
@@ -460,15 +469,73 @@ def run_single_scenario(
     )
 
     try:
-        # Create patched INI file
-        ini_tools.create_patched_ini(
-            template_path=template_path,
-            output_path=scenario_project_file,
-            parameters=scenario.parameters,
+        # Create patched INI file to a temporary path, then patch paths and write final
+        ini_config = ini_tools.read_ini_template(template_path)
+        if scenario.parameters:
+            validated_params = ini_tools.validate_parameters(scenario.parameters)
+            ini_tools.patch_ini_parameters(ini_config, validated_params)
+
+        # Ensure input and output paths
+        # The input path is not directly available here; infer from template if
+        # set, else use conservative default. We avoid guessing a raw path from
+        # output structure to prevent mis-processing. If template had empty
+        # data_path, we keep it empty (user's template should carry the right
+        # value), and still set out_path for outputs.
+        data_path_value = ini_config.get("RawProcess_General", "data_path", fallback="")
+        if not data_path_value:
+            # Use provided input_dir when template is empty
+            data_path_value = str(input_dir)
+
+        # Patch all path fields
+        ini_tools.patch_ini_paths(
+            ini_config,
+            proj_file=str(scenario_project_file),
+            dyn_metadata_file=str(scenario_output_dir / dyn_metadata_filename),
+            data_path=data_path_value,
+            out_path=str(scenario_output_dir),
         )
+
+        # Write final project file
+        ini_tools.write_ini_file(ini_config, scenario_project_file)
 
         success = True
         return_code = 0
+
+        # Materialize metadata files beside project file (idempotent overwrite)
+        try:
+            # Copy site-specific metadata template -> {site}.metadata
+            # (shared across years)
+            metadata_template = Path("config") / f"{site_id}_metadata_template.ini"
+            if not metadata_template.exists():
+                # Fallback to generic template
+                metadata_template = Path("config") / "metadata_template.ini"
+
+            if metadata_template.exists():
+                shutil.copyfile(
+                    metadata_template,
+                    scenario_output_dir / metadata_filename,
+                )
+            else:
+                logging.warning(
+                    f"No metadata template found for site {site_id}, "
+                    "skipping .metadata file generation"
+                )
+
+            # Generate dynamic metadata from ECMD CSV (all years included)
+            if ecmd_file and ecmd_file.exists():
+                ecmd.generate_dynamic_metadata(
+                    ecmd_path=ecmd_file,
+                    output_path=scenario_output_dir / dyn_metadata_filename,
+                    site_id=site_id,
+                )
+            else:
+                logging.warning(
+                    f"ECMD file not found or not provided for site {site_id}, "
+                    f"skipping dynamic metadata generation"
+                )
+
+        except Exception as meta_err:
+            logging.warning(f"Failed to materialize metadata files: {meta_err}")
 
         if not dry_run:
             # Run EddyPro with monitoring
@@ -547,6 +614,11 @@ def run_scenario_batch(
     eddypro_executable: Path,
     stream_output: bool,
     metrics_interval: float,
+    *,
+    site_id: str,
+    year: int,
+    input_dir: Path,
+    ecmd_file: Path | None = None,
     dry_run: bool = False,
 ) -> list[dict[str, Any]]:
     """
@@ -575,6 +647,10 @@ def run_scenario_batch(
             eddypro_executable=eddypro_executable,
             stream_output=stream_output,
             metrics_interval=metrics_interval,
+            site_id=site_id,
+            year=year,
+            input_dir=input_dir,
+            ecmd_file=ecmd_file,
             dry_run=dry_run,
         )
         scenario_results.append(result)
