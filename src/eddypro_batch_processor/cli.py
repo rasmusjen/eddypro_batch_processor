@@ -36,9 +36,9 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  eddypro-batch run --config config/config.yaml
+  eddypro-batch --config config/config.yaml run
   eddypro-batch scenarios --site GL-ZaF --years 2021 2022
-  eddypro-batch validate --config config/config.yaml
+  eddypro-batch --config config/config.yaml validate
   eddypro-batch status
         """,
     )

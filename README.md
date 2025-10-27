@@ -158,19 +158,19 @@ source venv/bin/activate
 1. **Validate your configuration:**
 
    ```bash
-   eddypro-batch validate --config config/config.yaml
+   eddypro-batch --config config/config.yaml validate
    ```
 
 2. **Run processing for one or more years:**
 
    ```bash
-   eddypro-batch run --config config/config.yaml --site GL-ZaF --years 2021 2022
+   eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 2022
    ```
 
 3. **Run a single scenario with specific parameters:**
 
    ```bash
-   eddypro-batch run --config config/config.yaml --site GL-ZaF --years 2021 --rot-meth 1 --tlag-meth 2 --detrend-meth 0 --despike-vm 1
+   eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 --rot-meth 1 --tlag-meth 2 --detrend-meth 0 --despike-vm 1
    ```
 
 4. **Test all combinations of parameter scenarios (Cartesian product):**
@@ -178,7 +178,7 @@ source venv/bin/activate
    This example tests all 16 combinations (2×2×2×2):
 
    ```bash
-   eddypro-batch scenarios --config config/config.yaml --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
+   eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
    ```
 
    **Parameter meanings:**
@@ -195,7 +195,7 @@ source venv/bin/activate
 5. **Dry-run mode (generate files without executing EddyPro):**
 
    ```bash
-   eddypro-batch run --config config/config.yaml --site GL-ZaF --years 2021 --dry-run
+   eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 --dry-run
    ```
 
 6. **Check results from last run:**
@@ -224,7 +224,7 @@ For detailed information, see the `docs/` directory:
 Catch configuration errors before processing:
 
 ```bash
-eddypro-batch validate
+eddypro-batch --config config/config.yaml validate
 ```
 
 Validates:
@@ -239,7 +239,7 @@ Validates:
 Test multiple parameter combinations systematically. The `scenarios` command creates a Cartesian product of all parameter values:
 
 ```bash
-eddypro-batch scenarios --config config/config.yaml --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
+eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
 ```
 
 This creates 16 scenarios (2×2×2×2) with all combinations:
