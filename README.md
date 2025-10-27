@@ -38,9 +38,19 @@ cd eddypro_batch_processor
 ```
 
 Create virtual environment and install:
+
+**On Windows (PowerShell):**
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install -e .
+```
+
+**On Linux/macOS (Bash):**
 ```bash
 python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
+source venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -53,6 +63,10 @@ cp config/config.yaml.example config/config.yaml
 ```
 
 **Key configuration items:**
+```
+
+**Key configuration items:**
+
 - Set `eddypro_executable` to your EddyPro installation path
 - Update `input_dir_pattern` and `output_dir_pattern` for your data structure
 - Specify `ecmd_file` path for your site metadata
@@ -61,6 +75,7 @@ cp config/config.yaml.example config/config.yaml
 #### 4. Verify Installation
 
 Test that everything is working:
+
 ```bash
 # Check CLI is installed
 eddypro-batch --help
@@ -77,33 +92,43 @@ eddypro-batch validate --config config/config.yaml
 #### Common Issues
 
 **EddyPro executable not found:**
-```
+
+```text
 Error: EddyPro executable not found at: <path>
 ```
+
 **Solution:** Check the `eddypro_executable` path in `config.yaml`. Common locations:
+
 - Windows: `C:\Program Files\LI-COR\EddyPro-7.0.9\bin\eddypro_rp.exe`
 - Linux: `/opt/eddypro/bin/eddypro_rp`
 - macOS: `/Applications/EddyPro.app/Contents/MacOS/eddypro_rp`
 
 **Missing Plotly (charts disabled):**
-```
+
+```text
 Warning: Plotly not available, charts disabled
 ```
+
 **Solution:** Install optional dependencies:
+
 ```bash
 pip install plotly
 ```
 
 **ECMD file validation errors:**
-```
+
+```text
 Error: Missing required columns in ECMD file
 ```
+
 **Solution:** See [CONFIG.md](docs/CONFIG.md) for ECMD format requirements. Ensure your CSV has required columns: `filename`, `date`, `time`, `DOY`, etc.
 
 **Permission errors on Windows:**
-```
+
+```text
 PermissionError: [Errno 13] Permission denied
 ```
+
 **Solution:** Run terminal as Administrator, or ensure EddyPro installation directory is accessible.
 
 #### Getting Help
@@ -114,22 +139,67 @@ PermissionError: [Errno 13] Permission denied
 
 ### Basic Usage
 
+**First, activate your virtual environment:**
+
+**Windows (PowerShell):**
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+**Linux/macOS (Bash):**
+```bash
+source venv/bin/activate
+```
+
+---
+
+**Then run commands:**
+
 1. **Validate your configuration:**
+
    ```bash
-   eddypro-batch validate
+   eddypro-batch validate --config config/config.yaml
    ```
 
 2. **Run processing for one or more years:**
+
    ```bash
-   eddypro-batch run --site GL-ZaF --years 2021 2022
+   eddypro-batch run --config config/config.yaml --site GL-ZaF --years 2021 2022
    ```
 
-3. **Test parameter scenarios:**
+3. **Run a single scenario with specific parameters:**
+
    ```bash
-   eddypro-batch scenarios --rot-meth 1 3 --tlag-meth 2 4 --years 2021
+   eddypro-batch run --config config/config.yaml --site GL-ZaF --years 2021 --rot-meth 1 --tlag-meth 2 --detrend-meth 0 --despike-vm 1
    ```
 
-4. **Check results:**
+4. **Test all combinations of parameter scenarios (Cartesian product):**
+
+   This example tests all 16 combinations (2×2×2×2):
+
+   ```bash
+   eddypro-batch scenarios --config config/config.yaml --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
+   ```
+
+   **Parameter meanings:**
+
+   - `--rot-meth 1 3` → Rotation methods: 1=Double Rotation (DR), 3=Planar Fit (PF)
+   - `--tlag-meth 2 4` → Time lag methods: 2=Constant (CMD), 4=Automatic Optimization (AO)
+   - `--detrend-meth 0 1` → Detrending: 0=Block Average (BA), 1=Linear Detrending (LD)
+   - `--despike-vm 0 1` → Spike removal: 0=Vickers & Mahrt (1997), 1=Mauder et al. (2013)
+
+   Each scenario runs independently and produces separate output files with unique names (e.g., `scenario_rot1_tlag2_det0_spk1`).
+
+   See [SCENARIOS.md](docs/SCENARIOS.md) for detailed documentation on scenario runs.
+
+5. **Dry-run mode (generate files without executing EddyPro):**
+
+   ```bash
+   eddypro-batch run --config config/config.yaml --site GL-ZaF --years 2021 --dry-run
+   ```
+
+6. **Check results from last run:**
+
    ```bash
    eddypro-batch status
    ```
@@ -138,12 +208,14 @@ PermissionError: [Errno 13] Permission denied
 
 For detailed information, see the `docs/` directory:
 
-- **[USAGE.md](docs/USAGE.md)** – Complete CLI usage guide with examples
-- **[CONFIG.md](docs/CONFIG.md)** – Configuration file reference and ECMD format
-- **[SCENARIOS.md](docs/SCENARIOS.md)** – Scenario matrix runs and parameter testing
-- **[REPORTING.md](docs/REPORTING.md)** – Understanding reports and performance metrics
-- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** – Contributing guidelines and development setup
-- **[IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)** – Project roadmap and milestones
+- **[USAGE.md](docs/USAGE.md)** – Complete CLI usage guide with all command examples and options
+- **[CONFIG.md](docs/CONFIG.md)** – Configuration file reference, YAML structure, and ECMD format specifications
+- **[SCENARIOS.md](docs/SCENARIOS.md)** – Scenario matrix runs, parameter testing, and naming conventions
+- **[REPORTING.md](docs/REPORTING.md)** – Understanding reports, performance metrics, and manifest structure
+- **[OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md)** – Machine-readable output file tracking in manifests
+- **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** – Contributing guidelines, development setup, and testing
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** – System design and module organization
+- **[IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)** – Project roadmap and completed milestones
 
 ## Key Capabilities
 
@@ -156,6 +228,7 @@ eddypro-batch validate
 ```
 
 Validates:
+
 - Required config keys and types
 - Path existence (EddyPro executable, input directories, ECMD file)
 - ECMD schema (required columns, data types)
@@ -163,21 +236,27 @@ Validates:
 
 ### Scenario Matrix Testing
 
-Test multiple parameter combinations systematically:
+Test multiple parameter combinations systematically. The `scenarios` command creates a Cartesian product of all parameter values:
 
 ```bash
-eddypro-batch scenarios \
-  --rot-meth 1 3 \
-  --tlag-meth 2 4 \
-  --site GL-ZaF \
-  --years 2021
+eddypro-batch scenarios --config config/config.yaml --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
 ```
 
-Creates 4 scenarios with all combinations of rotation methods (DR, PF) and time lag methods (CMD, AO).
+This creates 16 scenarios (2×2×2×2) with all combinations:
+
+- Rotation: Double Rotation (1) and Planar Fit (3)
+- Time lag: Constant (2) and Automatic Optimization (4)
+- Detrending: Block Average (0) and Linear Detrending (1)
+- Spike removal: Vickers & Mahrt (0) and Mauder et al. (1)
+
+Each scenario is named uniquely (e.g., `scenario_rot1_tlag2_det0_spk1`) and processed independently. Results are tracked in the run manifest for comparison.
+
+**Note:** Maximum 32 scenarios allowed (configurable via `--max-scenarios`). See [SCENARIOS.md](docs/SCENARIOS.md) for details.
 
 ### Performance Monitoring
 
 Track resource usage during processing:
+
 - CPU utilization (process and system)
 - Memory usage (RSS, peak)
 - Disk I/O (read/write MB, IOPS)
@@ -187,11 +266,17 @@ Metrics are saved per scenario and aggregated in reports.
 
 ### Comprehensive Reporting
 
-Generates:
-- **HTML reports** with interactive Plotly charts
-- **JSON manifests** for programmatic analysis
-- **Per-scenario metrics** (CSV time series)
-- **Provenance capture** (config hash, git SHA, software versions)
+Generates detailed reports after each run:
+
+- **HTML reports** with interactive Plotly charts (CPU, memory, I/O over time)
+- **JSON manifests** (`run_manifest.json`) for programmatic analysis
+  - Complete scenario results with success/failure status
+  - Machine-readable output file tracking (all EddyPro CSV outputs)
+  - Duration, metrics summary, and configuration snapshot
+- **Per-scenario metrics** (CSV time series of resource usage)
+- **Provenance capture** (config checksum, git SHA, Python environment, package versions)
+
+Reports are saved to `{output_dir}/reports/` by default. See [REPORTING.md](docs/REPORTING.md) and [OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md) for details.
 
 ## Configuration Example
 
@@ -217,6 +302,7 @@ See [CONFIG.md](docs/CONFIG.md) for all options and details.
 ## Contributing
 
 Contributions are welcome! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for:
+
 - Development setup
 - Code standards (Black, Ruff, Mypy)
 - Testing guidelines (pytest, coverage)
