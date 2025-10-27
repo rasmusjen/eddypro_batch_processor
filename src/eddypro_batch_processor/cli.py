@@ -348,29 +348,11 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
                 validated_params = ini_tools.validate_parameters(ini_parameters)
                 ini_tools.patch_ini_parameters(ini_config, validated_params)
 
-            # Patch path fields
-            # Input path from configured pattern
-            input_pattern = config.get("input_dir_pattern", "")
-            data_path_value = input_pattern.format(year=year, site_id=site_id)
-
-            dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
-            ini_tools.patch_ini_paths(
-                ini_config,
-                proj_file=str(project_file),
-                dyn_metadata_file=str(output_dir / dyn_metadata_filename),
-                data_path=data_path_value,
-                out_path=str(output_dir),
-            )
-
-            ini_tools.write_ini_file(ini_config, project_file)
-
-            # Materialize metadata files
+            # Materialize metadata files early (idempotent)
             try:
                 # Copy site-specific metadata template -> {site}.metadata
-                # (shared across years)
                 metadata_template = Path("config") / f"{site_id}_metadata_template.ini"
                 if not metadata_template.exists():
-                    # Fallback to generic template
                     metadata_template = Path("config") / "metadata_template.ini"
 
                 if metadata_template.exists():
@@ -390,6 +372,7 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
                 else:
                     ecmd_file = Path(ecmd_file_pattern)
 
+                dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
                 if ecmd_file.exists():
                     ecmd.generate_dynamic_metadata(
                         ecmd_path=ecmd_file,
@@ -405,7 +388,40 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
             except Exception as meta_err:
                 logging.warning(f"Failed to materialize metadata files: {meta_err}")
 
+            # Patch path fields
+            # Input path from configured pattern
+            input_pattern = config.get("input_dir_pattern", "")
+            data_path_value = input_pattern.format(year=year, site_id=site_id)
+            ini_tools.patch_ini_paths(
+                ini_config,
+                proj_file=str(output_dir / f"{site_id}.metadata"),
+                dyn_metadata_file=str(output_dir / f"{site_id}_dynamic_metadata.txt"),
+                data_path=data_path_value,
+                out_path=str(output_dir),
+            )
+
+            # Patch Project metadata fields (creation_date, project_title, etc.)
+            ini_tools.patch_project_metadata(
+                ini_config,
+                site_id=site_id,
+                year=year,
+                scenario_suffix="",
+            )
+
+            ini_tools.write_ini_file(ini_config, project_file)
+
             logging.info(f"Created project file: {project_file}")
+
+            # Preflight validation: check data_path and file availability
+            if not dry_run:
+                try:
+                    ini_tools.validate_eddypro_inputs(ini_config)
+                    ini_tools.validate_eddypro_metadata(ini_config)
+                except ini_tools.INIParameterError:
+                    logging.exception(f"Preflight validation failed for year {year}")
+                    overall_success = False
+                    continue
+
         except Exception:
             logging.exception("Failed to create project file")
             overall_success = False

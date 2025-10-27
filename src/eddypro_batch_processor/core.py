@@ -486,18 +486,6 @@ def run_single_scenario(
             # Use provided input_dir when template is empty
             data_path_value = str(input_dir)
 
-        # Patch all path fields
-        ini_tools.patch_ini_paths(
-            ini_config,
-            proj_file=str(scenario_project_file),
-            dyn_metadata_file=str(scenario_output_dir / dyn_metadata_filename),
-            data_path=data_path_value,
-            out_path=str(scenario_output_dir),
-        )
-
-        # Write final project file
-        ini_tools.write_ini_file(ini_config, scenario_project_file)
-
         success = True
         return_code = 0
 
@@ -536,6 +524,36 @@ def run_single_scenario(
 
         except Exception as meta_err:
             logging.warning(f"Failed to materialize metadata files: {meta_err}")
+
+        # Patch all path fields (normalized to forward slashes)
+        ini_tools.patch_ini_paths(
+            ini_config,
+            proj_file=str(scenario_output_dir / metadata_filename),
+            dyn_metadata_file=str(scenario_output_dir / dyn_metadata_filename),
+            data_path=data_path_value,
+            out_path=str(scenario_output_dir),
+        )
+
+        # Patch Project metadata fields (creation_date, last_change_date, etc.)
+        ini_tools.patch_project_metadata(
+            ini_config,
+            site_id=site_id,
+            year=year,
+            scenario_suffix=scenario.suffix,
+        )
+
+        # Write final project file (no spaces around '=', LF endings)
+        ini_tools.write_ini_file(ini_config, scenario_project_file)
+
+        # Preflight validation: ensure inputs and metadata are sane
+        try:
+            ini_tools.validate_eddypro_inputs(ini_config)
+            ini_tools.validate_eddypro_metadata(ini_config)
+        except ini_tools.INIParameterError:
+            logging.exception(
+                f"Preflight validation failed for scenario {scenario.index}"
+            )
+            raise
 
         if not dry_run:
             # Run EddyPro with monitoring

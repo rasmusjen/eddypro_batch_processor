@@ -8,6 +8,7 @@ Supports patching specific parameters while preserving the rest of the template.
 
 import configparser
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -170,6 +171,9 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
     """
     Write INI configuration to file.
 
+    Writes with no spaces around delimiters and LF line endings to match
+    EddyPro native format expectations.
+
     Args:
         config: ConfigParser object to write
         output_path: Path where to write the INI file
@@ -181,8 +185,9 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, "w", encoding="utf-8") as f:
-            config.write(f)
+        # Write with no spaces around '=' and LF endings (EddyPro native format)
+        with open(output_path, "w", encoding="utf-8", newline="\n") as f:
+            config.write(f, space_around_delimiters=False)
 
         logger.debug(f"Wrote INI file to {output_path}")
     except OSError as e:
@@ -199,10 +204,12 @@ def patch_ini_paths(
 ) -> None:
     """Patch essential path fields inside an EddyPro INI/eddypro project file.
 
+    All paths are normalized to forward slashes for EddyPro compatibility.
+
     Args:
         config: Parsed INI configuration to modify in-place
-        proj_file: Project filename (typically the .eddypro file name)
-        dyn_metadata_file: Dynamic metadata filename (.txt) expected by EddyPro
+        proj_file: Path to the static metadata file (.metadata)
+        dyn_metadata_file: Path to the dynamic metadata file (.txt)
         data_path: Absolute path to input raw data
         out_path: Absolute path to output directory for this run/scenario
 
@@ -217,21 +224,205 @@ def patch_ini_paths(
             "Required section 'RawProcess_General' missing from template"
         )
 
+    # Normalize all paths to forward slashes (EddyPro standard)
+    proj_file_normalized = Path(proj_file).as_posix()
+    dyn_metadata_file_normalized = Path(dyn_metadata_file).as_posix()
+    data_path_normalized = Path(data_path).as_posix()
+    out_path_normalized = Path(out_path).as_posix()
+
     # Project-level paths
-    config.set("Project", "proj_file", proj_file)
-    config.set("Project", "dyn_metadata_file", dyn_metadata_file)
-    config.set("Project", "out_path", out_path)
+    config.set("Project", "proj_file", proj_file_normalized)
+    config.set("Project", "dyn_metadata_file", dyn_metadata_file_normalized)
+    config.set("Project", "out_path", out_path_normalized)
+
+    # Ensure use flags are enabled (template should already set these to 1)
+    # but we enforce to avoid surprises when templates vary.
+    try:
+        config.set("Project", "use_pfile", "1")
+        config.set("Project", "use_dyn_md_file", "1")
+    except Exception:  # pragma: no cover - defensive only
+        logger.debug("Project section missing use flags; leaving as-is")
 
     # Input data path
-    config.set("RawProcess_General", "data_path", data_path)
+    config.set("RawProcess_General", "data_path", data_path_normalized)
 
     logger.debug(
         "Patched paths: Project.proj_file=%s, Project.dyn_metadata_file=%s, "
         "Project.out_path=%s, RawProcess_General.data_path=%s",
-        proj_file,
-        dyn_metadata_file,
-        out_path,
-        data_path,
+        proj_file_normalized,
+        dyn_metadata_file_normalized,
+        out_path_normalized,
+        data_path_normalized,
+    )
+
+
+def patch_project_metadata(
+    config: configparser.ConfigParser,
+    *,
+    site_id: str,
+    year: int,
+    scenario_suffix: str = "",
+) -> None:
+    """Patch Project metadata fields to match EddyPro native format.
+
+    Populates creation_date, last_change_date, project_title, and project_id
+    to align with legacy EddyPro project file standards.
+
+    Args:
+        config: Parsed INI configuration to modify in-place
+        site_id: Site identifier (e.g., 'GL-ZaF')
+        year: Processing year
+        scenario_suffix: Optional scenario suffix (e.g., '_rot1_tlag2')
+
+    Raises:
+        INIParameterError: If required Project section is missing
+    """
+    if not config.has_section("Project"):
+        raise INIParameterError("Required section 'Project' missing from template")
+
+    # Get current timestamp in EddyPro format: YYYY-MM-DDTHH:MM:SS
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Set creation_date only if empty (preserve original creation time)
+    if not config.get("Project", "creation_date", fallback="").strip():
+        config.set("Project", "creation_date", now)
+
+    # Always update last_change_date to current time
+    config.set("Project", "last_change_date", now)
+
+    # Set project_title: "<site_id> <year>" or with scenario suffix
+    if scenario_suffix:
+        project_title = f"{site_id} {year}{scenario_suffix}"
+    else:
+        project_title = f"{site_id} {year}"
+    config.set("Project", "project_title", project_title)
+
+    # Set project_id: "<site_id>_<year>"
+    project_id = f"{site_id}_{year}"
+    config.set("Project", "project_id", project_id)
+
+    logger.debug(
+        "Patched Project metadata: creation_date=%s, last_change_date=%s, "
+        "project_title=%s, project_id=%s",
+        config.get("Project", "creation_date"),
+        now,
+        project_title,
+        project_id,
+    )
+
+
+def validate_eddypro_inputs(config: configparser.ConfigParser) -> None:
+    """Validate that EddyPro inputs are accessible before execution.
+
+    Checks that data_path exists and contains at least one matching file,
+    preventing Fatal error(86) from EddyPro.
+
+    Args:
+        config: Parsed EddyPro project configuration
+
+    Raises:
+        INIParameterError: If data_path is invalid or no files found
+    """
+    # Get data_path
+    data_path_str = config.get("RawProcess_General", "data_path", fallback="")
+    if not data_path_str:
+        raise INIParameterError(
+            "RawProcess_General.data_path is empty. "
+            "Cannot proceed without input data directory."
+        )
+
+    data_path = Path(data_path_str)
+    if not data_path.exists():
+        raise INIParameterError(
+            f"RawProcess_General.data_path does not exist: {data_path}"
+        )
+
+    if not data_path.is_dir():
+        raise INIParameterError(
+            f"RawProcess_General.data_path is not a directory: {data_path}"
+        )
+
+    # Check for CSV files (basic check; prototype matching is EddyPro's job)
+    csv_files = list(data_path.glob("*.csv"))
+    if not csv_files:
+        raise INIParameterError(
+            f"No CSV files found in data_path: {data_path}. "
+            "EddyPro will fail with Fatal error(86)."
+        )
+
+    # Get file_prototype for informational logging
+    file_prototype = config.get("Project", "file_prototype", fallback="(not set)")
+
+    logger.info(
+        f"Preflight check passed: {len(csv_files)} CSV file(s) found in {data_path}"
+    )
+    logger.debug(f"File prototype: {file_prototype}")
+
+    # Optional: warn if prototype looks suspicious (e.g., still has placeholder '?')
+    # but don't fail, as EddyPro will handle the actual matching
+    if file_prototype and "?" in file_prototype:
+        # Sample a few filenames for the log
+        sample_files = [f.name for f in csv_files[:3]]
+        logger.debug(
+            f"Sample files in directory: {sample_files}. "
+            f"Ensure prototype '{file_prototype}' matches."
+        )
+
+
+def validate_eddypro_metadata(config: configparser.ConfigParser) -> None:
+    """Validate that the static metadata file referenced by the project exists
+    and declares the mandatory variables.
+
+    This prevents EddyPro Fatal error(23) due to missing u/v/w/ts definitions or
+    accidental mis-pointing to the .eddypro file itself.
+
+    Args:
+        config: Parsed EddyPro project configuration
+
+    Raises:
+        INIParameterError: If metadata file is missing or invalid
+    """
+    proj_file_path = config.get("Project", "proj_file", fallback="").strip()
+    if not proj_file_path:
+        raise INIParameterError(
+            "Project.proj_file is empty. It must point to the static .metadata file."
+        )
+
+    meta_path = Path(proj_file_path)
+    if not meta_path.exists() or not meta_path.is_file():
+        raise INIParameterError(f"Static metadata file not found: {meta_path}")
+
+    # Parse metadata and check variables in [FileDescription]
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(meta_path, encoding="utf-8")
+    except configparser.Error as e:  # pragma: no cover
+        raise INIParameterError(
+            f"Failed to parse metadata file {meta_path}: {e}"
+        ) from e
+
+    if not parser.has_section("FileDescription"):
+        raise INIParameterError(
+            f"Metadata file {meta_path} missing [FileDescription] section"
+        )
+
+    # Collect declared variables
+    variables: set[str] = set()
+    for key, value in parser.items("FileDescription"):
+        if key.endswith("_variable"):
+            variables.add(value.strip())
+
+    required = {"u", "v", "w", "ts"}
+    missing = sorted(required - variables)
+    if missing:
+        raise INIParameterError(
+            "Metadata is missing required variables: " + ", ".join(missing)
+        )
+
+    logger.info(
+        "Metadata validation passed for %s (vars present: %s)",
+        meta_path.name,
+        sorted(variables),
     )
 
 

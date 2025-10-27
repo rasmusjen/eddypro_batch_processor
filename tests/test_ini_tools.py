@@ -273,7 +273,7 @@ despike_vm=0
         """Test that patch_ini_paths updates key Project and data path fields."""
         config = ini_tools.read_ini_template(self.template_path)
 
-        proj_file = "SITE_2021_rot1.eddypro"
+        proj_file = "SITE.metadata"
         dyn_md = "SITE_dynamic_metadata.txt"
         data_path = "/abs/input/path"
         out_path = "/abs/output/path/scenario_rot1"
@@ -296,6 +296,34 @@ despike_vm=0
         self.assertEqual(config.get("Project", "dyn_metadata_file"), dyn_md)
         self.assertEqual(config.get("Project", "out_path"), out_path)
         self.assertEqual(config.get("RawProcess_General", "data_path"), data_path)
+
+    def test_validate_eddypro_metadata(self):
+        """Ensure metadata validation passes for a valid template file."""
+        config = configparser.ConfigParser()
+        config.add_section("Project")
+
+        # Copy a real metadata template to a temp file
+        repo_meta = Path("config") / "GL-ZaF_metadata_template.ini"
+        self.assertTrue(
+            repo_meta.exists(),
+            msg="Expected repository metadata template to exist for the test",
+        )
+        tmp_meta = self.temp_dir / "SITE.metadata"
+        shutil.copyfile(repo_meta, tmp_meta)
+
+        config.set("Project", "proj_file", str(tmp_meta))
+
+        # Should not raise
+        ini_tools.validate_eddypro_metadata(config)
+
+    def test_validate_eddypro_metadata_missing_file(self):
+        """Validator should raise for missing metadata file."""
+        config = configparser.ConfigParser()
+        config.add_section("Project")
+        config.set("Project", "proj_file", str(self.temp_dir / "missing.metadata"))
+
+        with self.assertRaises(ini_tools.INIParameterError):
+            ini_tools.validate_eddypro_metadata(config)
 
 
 class TestScenarioSuffixGeneration(unittest.TestCase):
