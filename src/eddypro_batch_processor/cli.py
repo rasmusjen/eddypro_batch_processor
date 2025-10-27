@@ -655,12 +655,14 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
             # Generate run ID
             run_id = f"{site_id}_{start_time.strftime('%Y%m%d_%H%M%S')}"
 
-            # Collect output directories
+            # Collect output directories from scenario results
             output_dirs = []
-            for year in years:
-                year_dir = Path(output_pattern.format(year=year, site_id=site_id))
-                if year_dir.exists():
-                    output_dirs.append(year_dir)
+            for result in all_scenario_results:
+                output_dir = result.get("output_dir")
+                if output_dir:
+                    output_dir_path = Path(output_dir)
+                    if output_dir_path.exists():
+                        output_dirs.append(output_dir_path)
 
             # Compute config checksum
             config_checksum = str(hash(json.dumps(config, sort_keys=True)))

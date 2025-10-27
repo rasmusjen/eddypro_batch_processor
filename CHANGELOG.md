@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Machine-readable output file tracking in run manifests**
+  - Run manifests now include `output_files` field with absolute paths to all EddyPro output CSV files
+  - Tracks four file types: fluxnet, full_output, metadata, and qc_details
+  - Enables automated post-processing and validation workflows
+  - Files grouped by output directory with sorted absolute paths
+
 ### ⚠️ BREAKING CHANGES
 
 - **Minimum Python version increased to 3.10**

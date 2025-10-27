@@ -23,6 +23,64 @@ def test_compute_file_checksum(tmp_path):
         report.compute_file_checksum(tmp_path / "nonexistent.txt")
 
 
+def test_collect_eddypro_output_files(tmp_path):
+    """Test EddyPro output file collection."""
+    site_id = "GL-ZaF"
+
+    # Create sample EddyPro output files
+    files_to_create = [
+        f"eddypro_{site_id}_fluxnet_2024-11-18T185928_adv.csv",
+        f"eddypro_{site_id}_full_output_2024-11-18T185928_adv.csv",
+        f"eddypro_{site_id}_metadata_2024-11-18T185928_adv.csv",
+        f"eddypro_{site_id}_qc_details_2024-11-18T165300_adv.csv",
+        # Extra files that should not be collected
+        f"{site_id}_cleanset.csv",
+        f"{site_id}_WorkSet.csv",
+        "other_file.txt",
+    ]
+
+    for filename in files_to_create:
+        (tmp_path / filename).write_text("test data")
+
+    # Collect files
+    collected = report.collect_eddypro_output_files(tmp_path, site_id)
+
+    # Verify structure
+    assert "fluxnet_files" in collected
+    assert "full_output_files" in collected
+    assert "metadata_files" in collected
+    assert "qc_details_files" in collected
+
+    # Verify counts
+    assert len(collected["fluxnet_files"]) == 1
+    assert len(collected["full_output_files"]) == 1
+    assert len(collected["metadata_files"]) == 1
+    assert len(collected["qc_details_files"]) == 1
+
+    # Verify absolute paths
+    for file_list in collected.values():
+        for file_path in file_list:
+            assert Path(file_path).is_absolute()
+            assert Path(file_path).exists()
+
+    # Verify correct file matching
+    assert "fluxnet" in collected["fluxnet_files"][0]
+    assert "full_output" in collected["full_output_files"][0]
+    assert "metadata" in collected["metadata_files"][0]
+    assert "qc_details" in collected["qc_details_files"][0]
+
+
+def test_collect_eddypro_output_files_empty_directory(tmp_path):
+    """Test collection when no matching files exist."""
+    collected = report.collect_eddypro_output_files(tmp_path, "GL-ZaF")
+
+    # Should return empty lists for all file types
+    assert collected["fluxnet_files"] == []
+    assert collected["full_output_files"] == []
+    assert collected["metadata_files"] == []
+    assert collected["qc_details_files"] == []
+
+
 def test_get_python_environment_info():
     """Test Python environment info capture."""
     env_info = report.get_python_environment_info()
@@ -105,6 +163,49 @@ def test_generate_run_manifest():
     assert len(manifest["scenarios"]) == 2
     assert manifest["duration_seconds"] == 7200.0  # 2 hours
     assert "environment" in manifest
+    assert "output_files" in manifest  # New: verify output files included
+
+
+def test_generate_run_manifest_with_output_files(tmp_path):
+    """Test run manifest includes collected EddyPro output files."""
+    site_id = "GL-ZaF"
+
+    # Create output directory with sample files
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    (output_dir / f"eddypro_{site_id}_fluxnet_2024-11-18T185928_adv.csv").write_text(
+        "data"
+    )
+    (
+        output_dir / f"eddypro_{site_id}_full_output_2024-11-18T185928_adv.csv"
+    ).write_text("data")
+
+    start_time = datetime(2025, 10, 1, 10, 0, 0)
+    end_time = datetime(2025, 10, 1, 10, 30, 0)
+
+    manifest = report.generate_run_manifest(
+        run_id="test_run_002",
+        config={"site_id": site_id},
+        config_checksum="xyz789",
+        site_id=site_id,
+        years_processed=[2024],
+        scenarios=[{"scenario_name": "baseline", "success": True}],
+        start_time=start_time,
+        end_time=end_time,
+        overall_success=True,
+        output_dirs=[output_dir],
+    )
+
+    # Verify output_files structure
+    assert "output_files" in manifest
+    assert str(output_dir) in manifest["output_files"]
+
+    collected = manifest["output_files"][str(output_dir)]
+    assert "fluxnet_files" in collected
+    assert "full_output_files" in collected
+    assert len(collected["fluxnet_files"]) == 1
+    assert len(collected["full_output_files"]) == 1
 
 
 def test_write_run_manifest(tmp_path):

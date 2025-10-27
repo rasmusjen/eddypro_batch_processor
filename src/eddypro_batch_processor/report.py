@@ -167,6 +167,49 @@ def write_scenario_manifest(manifest: dict[str, Any], output_path: Path) -> None
         logger.exception(f"Failed to write scenario manifest to {output_path}")
 
 
+def collect_eddypro_output_files(
+    output_dir: Path, site_id: str
+) -> dict[str, list[str]]:
+    """
+    Collect all EddyPro output CSV files matching standard patterns.
+
+    Scans the specified output directory for EddyPro CSV outputs and returns
+    absolute paths grouped by file type.
+
+    Args:
+        output_dir: Path to the EddyPro output directory
+        site_id: Site identifier to match in filenames
+
+    Returns:
+        Dictionary mapping file type to sorted list of absolute path strings:
+        - "fluxnet_files": eddypro_{site_ID}_fluxnet_*.csv
+        - "full_output_files": eddypro_{site_ID}_full_output_*.csv
+        - "metadata_files": eddypro_{site_ID}_metadata_*.csv
+        - "qc_details_files": eddypro_{site_ID}_qc_details*.csv
+
+    Example:
+        >>> files = collect_eddypro_output_files(Path("/output"), "GL-ZaF")
+        >>> files["fluxnet_files"]
+        ['/output/eddypro_GL-ZaF_fluxnet_2024-11-18T185928_adv.csv']
+    """
+    patterns = {
+        "fluxnet_files": f"eddypro_{site_id}_fluxnet_*.csv",
+        "full_output_files": f"eddypro_{site_id}_full_output_*.csv",
+        "metadata_files": f"eddypro_{site_id}_metadata_*.csv",
+        "qc_details_files": f"eddypro_{site_id}_qc_details*.csv",
+    }
+
+    collected: dict[str, list[str]] = {}
+
+    for file_type, pattern in patterns.items():
+        matching_files = sorted(output_dir.glob(pattern))
+        # Convert to absolute path strings
+        collected[file_type] = [str(f.resolve()) for f in matching_files]
+        logger.debug(f"Found {len(collected[file_type])} {file_type} in {output_dir}")
+
+    return collected
+
+
 def generate_run_manifest(
     run_id: str,
     config: dict[str, Any],
@@ -201,6 +244,13 @@ def generate_run_manifest(
     """
     duration_seconds = (end_time - start_time).total_seconds()
 
+    # Collect EddyPro output files from all output directories
+    output_files: dict[str, dict[str, list[str]]] = {}
+    for output_dir in output_dirs:
+        if output_dir.exists():
+            collected = collect_eddypro_output_files(output_dir, site_id)
+            output_files[str(output_dir)] = collected
+
     manifest = {
         "run_id": run_id,
         "timestamp": start_time.isoformat(),
@@ -214,6 +264,7 @@ def generate_run_manifest(
         "overall_success": overall_success,
         "scenarios": scenarios,
         "output_dirs": [str(d) for d in output_dirs],
+        "output_files": output_files,  # New: detailed file inventory
         "environment": get_python_environment_info(),
         "dry_run": config.get("dry_run", False),  # Track if this was a dry run
     }
