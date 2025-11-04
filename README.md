@@ -170,7 +170,7 @@ source venv/bin/activate
 3. **Run a single scenario with specific parameters:**
 
    ```bash
-   eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 --rot-meth 1 --tlag-meth 2 --detrend-meth 0 --despike-vm 1
+   eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 --rot-meth 1 --tlag-meth 2 --detrend-meth 0 --despike-meth 1
    ```
 
 4. **Test all combinations of parameter scenarios (Cartesian product):**
@@ -178,7 +178,7 @@ source venv/bin/activate
    This example tests all 16 combinations (2×2×2×2):
 
    ```bash
-   eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
+   eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-meth 0 1
    ```
 
    **Parameter meanings:**
@@ -186,7 +186,7 @@ source venv/bin/activate
    - `--rot-meth 1 3` → Rotation methods: 1=Double Rotation (DR), 3=Planar Fit (PF)
    - `--tlag-meth 2 4` → Time lag methods: 2=Constant (CMD), 4=Automatic Optimization (AO)
    - `--detrend-meth 0 1` → Detrending: 0=Block Average (BA), 1=Linear Detrending (LD)
-   - `--despike-vm 0 1` → Spike removal: 0=Vickers & Mahrt (1997), 1=Mauder et al. (2013)
+   - `--despike-meth 0 1` → Spike removal: 0=Vickers & Mahrt (1997), 1=Mauder et al. (2013)
 
    Each scenario runs independently and produces separate output files with unique names (e.g., `scenario_rot1_tlag2_det0_spk1`).
 
@@ -239,7 +239,7 @@ Validates:
 Test multiple parameter combinations systematically. The `scenarios` command creates a Cartesian product of all parameter values:
 
 ```bash
-eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-vm 0 1
+eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-meth 0 1
 ```
 
 This creates 16 scenarios (2×2×2×2) with all combinations:

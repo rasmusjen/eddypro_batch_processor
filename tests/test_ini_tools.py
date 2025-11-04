@@ -27,8 +27,8 @@ class TestParameterValidation(unittest.TestCase):
             ("tlag_meth", 4),
             ("detrend_meth", 0),
             ("detrend_meth", 1),
-            ("despike_vm", 0),
-            ("despike_vm", 1),
+            ("despike_meth", 0),
+            ("despike_meth", 1),
         ]
 
         for param_name, value in test_cases:
@@ -47,8 +47,8 @@ class TestParameterValidation(unittest.TestCase):
             ("tlag_meth", 3),
             ("detrend_meth", -1),
             ("detrend_meth", 2),
-            ("despike_vm", -1),
-            ("despike_vm", 2),
+            ("despike_meth", -1),
+            ("despike_meth", 2),
         ]
 
         for param_name, value in test_cases:
@@ -83,7 +83,7 @@ class TestParameterValidation(unittest.TestCase):
     def test_validate_parameters_dict(self):
         """Test validation of parameter dictionaries."""
         # Valid parameters
-        params = {"rot_meth": 1, "tlag_meth": 2, "detrend_meth": 0, "despike_vm": 1}
+        params = {"rot_meth": 1, "tlag_meth": 2, "detrend_meth": 0, "despike_meth": 1}
         result = ini_tools.validate_parameters(params)
         self.assertEqual(result, params)
 
@@ -100,7 +100,7 @@ class TestParameterValidation(unittest.TestCase):
         info = ini_tools.get_parameter_info()
 
         # Check that all expected parameters are present
-        expected_params = {"rot_meth", "tlag_meth", "detrend_meth", "despike_vm"}
+        expected_params = {"rot_meth", "tlag_meth", "detrend_meth", "despike_meth"}
         self.assertEqual(set(info.keys()), expected_params)
 
         # Check structure of parameter info
@@ -128,7 +128,7 @@ detrend_meth=0
 tlag_meth=2
 
 [RawProcess_ParameterSettings]
-despike_vm=0
+despike_meth=0
 """
         self.temp_dir = Path(tempfile.mkdtemp())
         self.template_path = self.temp_dir / "template.ini"
@@ -169,7 +169,12 @@ despike_vm=0
         """Test patching INI configuration with parameters."""
         config = ini_tools.read_ini_template(self.template_path)
 
-        parameters = {"rot_meth": 3, "tlag_meth": 4, "detrend_meth": 1, "despike_vm": 1}
+        parameters = {
+            "rot_meth": 3,
+            "tlag_meth": 4,
+            "detrend_meth": 1,
+            "despike_meth": 1,
+        }
 
         ini_tools.patch_ini_parameters(config, parameters)
 
@@ -177,6 +182,7 @@ despike_vm=0
         self.assertEqual(config.get("RawProcess_Settings", "rot_meth"), "3")
         self.assertEqual(config.get("RawProcess_Settings", "tlag_meth"), "4")
         self.assertEqual(config.get("RawProcess_Settings", "detrend_meth"), "1")
+        # despike_meth maps to despike_vm in the INI file
         self.assertEqual(config.get("RawProcess_ParameterSettings", "despike_vm"), "1")
 
     def test_patch_ini_parameters_missing_section(self):
@@ -228,7 +234,7 @@ despike_vm=0
     def test_create_patched_ini_with_parameters(self):
         """Test complete INI patching workflow with parameters."""
         output_path = self.temp_dir / "patched.ini"
-        parameters = {"rot_meth": 3, "despike_vm": 1}
+        parameters = {"rot_meth": 3, "despike_meth": 1}
 
         ini_tools.create_patched_ini(self.template_path, output_path, parameters)
 
@@ -238,6 +244,7 @@ despike_vm=0
         config = configparser.ConfigParser()
         config.read(output_path, encoding="utf-8")
         self.assertEqual(config.get("RawProcess_Settings", "rot_meth"), "3")
+        # despike_meth maps to despike_vm in the INI file
         self.assertEqual(config.get("RawProcess_ParameterSettings", "despike_vm"), "1")
         # Unchanged parameters should remain the same
         self.assertEqual(config.get("RawProcess_Settings", "tlag_meth"), "2")
@@ -342,24 +349,29 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
 
     def test_generate_scenario_suffix_multiple_parameters(self):
         """Test suffix generation with multiple parameters."""
-        parameters = {"rot_meth": 3, "tlag_meth": 4, "detrend_meth": 1, "despike_vm": 0}
+        parameters = {
+            "rot_meth": 3,
+            "tlag_meth": 4,
+            "detrend_meth": 1,
+            "despike_meth": 0,
+        }
         result = ini_tools.generate_scenario_suffix(parameters)
 
         # Should be sorted by parameter name alphabetically
-        # despike_vm, detrend_meth, rot_meth, tlag_meth
+        # despike_meth, detrend_meth, rot_meth, tlag_meth
         expected = "_spk0_det1_rot3_tlag4"
         self.assertEqual(result, expected)
 
     def test_generate_scenario_suffix_deterministic(self):
         """Test that suffix generation is deterministic."""
-        parameters = {"despike_vm": 1, "rot_meth": 1, "tlag_meth": 2}
+        parameters = {"despike_meth": 1, "rot_meth": 1, "tlag_meth": 2}
 
         # Generate suffix multiple times
         results = [ini_tools.generate_scenario_suffix(parameters) for _ in range(5)]
 
         # All results should be identical
         self.assertTrue(all(r == results[0] for r in results))
-        # Should be sorted alphabetically: despike_vm, rot_meth, tlag_meth
+        # Should be sorted alphabetically: despike_meth, rot_meth, tlag_meth
         self.assertEqual(results[0], "_spk1_rot1_tlag2")
 
     def test_generate_scenario_suffix_unknown_parameter(self):
@@ -369,6 +381,230 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
 
         # Should fallback to original parameter name
         self.assertEqual(result, "_unknown_param1")
+
+
+class TestConditionalDateRanges(unittest.TestCase):
+    """Test conditional date/time range population."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.test_year = 2021
+        self.config = configparser.ConfigParser()
+
+        # Create required sections
+        self.config.add_section("RawProcess_Settings")
+        self.config.add_section("RawProcess_TiltCorrection_Settings")
+        self.config.add_section("RawProcess_TimelagOptimization_Settings")
+
+        # Initialize empty date/time fields
+        self.config.set("RawProcess_TiltCorrection_Settings", "pf_start_date", "")
+        self.config.set("RawProcess_TiltCorrection_Settings", "pf_end_date", "")
+        self.config.set("RawProcess_TiltCorrection_Settings", "pf_start_time", "")
+        self.config.set("RawProcess_TiltCorrection_Settings", "pf_end_time", "")
+
+        self.config.set("RawProcess_TimelagOptimization_Settings", "to_start_date", "")
+        self.config.set("RawProcess_TimelagOptimization_Settings", "to_end_date", "")
+        self.config.set("RawProcess_TimelagOptimization_Settings", "to_start_time", "")
+        self.config.set("RawProcess_TimelagOptimization_Settings", "to_end_time", "")
+
+    def test_patch_date_ranges_rot_meth_3_planar_fit(self):
+        """Test date/time population when rot_meth=3 (Planar Fit)."""
+        # Set rot_meth to 3 (Planar Fit)
+        self.config.set("RawProcess_Settings", "rot_meth", "3")
+        self.config.set("RawProcess_Settings", "tlag_meth", "2")
+
+        # Apply conditional patching
+        ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+
+        # Verify planar fit date/time fields are populated
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_date"),
+            "2021-01-01",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_end_date"),
+            "2021-12-31",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_time"),
+            "00:00",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_end_time"),
+            "23:59",
+        )
+
+        # Verify time-lag optimization fields remain empty
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_date"),
+            "",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_end_date"),
+            "",
+        )
+
+    def test_patch_date_ranges_tlag_meth_4_optimization(self):
+        """Test date/time population when tlag_meth=4 (optimization)."""
+        # Set tlag_meth to 4 (time-lag optimization)
+        self.config.set("RawProcess_Settings", "rot_meth", "1")
+        self.config.set("RawProcess_Settings", "tlag_meth", "4")
+
+        # Apply conditional patching
+        ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+
+        # Verify time-lag optimization date/time fields are populated
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_date"),
+            "2021-01-01",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_end_date"),
+            "2021-12-31",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_time"),
+            "00:00",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_end_time"),
+            "23:59",
+        )
+
+        # Verify planar fit fields remain empty
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_date"),
+            "",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_end_date"), ""
+        )
+
+    def test_patch_date_ranges_both_conditions(self):
+        """Test date/time population when both rot_meth=3 and tlag_meth=4."""
+        # Set both conditions
+        self.config.set("RawProcess_Settings", "rot_meth", "3")
+        self.config.set("RawProcess_Settings", "tlag_meth", "4")
+
+        # Apply conditional patching
+        ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+
+        # Verify both sets of date/time fields are populated
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_date"),
+            "2021-01-01",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_end_date"),
+            "2021-12-31",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_date"),
+            "2021-01-01",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_end_date"),
+            "2021-12-31",
+        )
+
+    def test_patch_date_ranges_neither_condition(self):
+        """Test no population when neither condition is met."""
+        # Set rot_meth=1 and tlag_meth=2 (neither triggers population)
+        self.config.set("RawProcess_Settings", "rot_meth", "1")
+        self.config.set("RawProcess_Settings", "tlag_meth", "2")
+
+        # Apply conditional patching
+        ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+
+        # Verify all date/time fields remain empty
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_date"),
+            "",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_end_date"), ""
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_date"),
+            "",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_end_date"),
+            "",
+        )
+
+    def test_patch_date_ranges_different_year(self):
+        """Test date/time population with a different year."""
+        self.config.set("RawProcess_Settings", "rot_meth", "3")
+        self.config.set("RawProcess_Settings", "tlag_meth", "4")
+
+        # Apply with year 2023
+        ini_tools.patch_conditional_date_ranges(self.config, year=2023)
+
+        # Verify correct year is used
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_date"),
+            "2023-01-01",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_end_date"),
+            "2023-12-31",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_date"),
+            "2023-01-01",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_end_date"),
+            "2023-12-31",
+        )
+
+    def test_patch_date_ranges_missing_section_rot_meth_3(self):
+        """Test error when rot_meth=3 but TiltCorrection section is missing."""
+        # Remove the required section
+        self.config.remove_section("RawProcess_TiltCorrection_Settings")
+        self.config.set("RawProcess_Settings", "rot_meth", "3")
+
+        # Should raise error
+        with self.assertRaises(ini_tools.INIParameterError) as cm:
+            ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+
+        self.assertIn("RawProcess_TiltCorrection_Settings", str(cm.exception))
+        self.assertIn("rot_meth=3", str(cm.exception))
+
+    def test_patch_date_ranges_missing_section_tlag_meth_4(self):
+        """Test error when tlag_meth=4 but TimelagOptimization section missing."""
+        # Remove the required section
+        self.config.remove_section("RawProcess_TimelagOptimization_Settings")
+        self.config.set("RawProcess_Settings", "tlag_meth", "4")
+
+        # Should raise error
+        with self.assertRaises(ini_tools.INIParameterError) as cm:
+            ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+
+        self.assertIn("RawProcess_TimelagOptimization_Settings", str(cm.exception))
+        self.assertIn("tlag_meth=4", str(cm.exception))
+
+    def test_patch_date_ranges_no_rawprocess_settings_section(self):
+        """Test graceful handling when RawProcess_Settings section is missing."""
+        # Remove RawProcess_Settings section entirely
+        self.config.remove_section("RawProcess_Settings")
+
+        # Should not raise error, just do nothing
+        try:
+            ini_tools.patch_conditional_date_ranges(self.config, year=self.test_year)
+        except Exception as e:
+            self.fail(f"Should not raise exception: {e}")
+
+        # Verify fields remain empty
+        self.assertEqual(
+            self.config.get("RawProcess_TiltCorrection_Settings", "pf_start_date"),
+            "",
+        )
+        self.assertEqual(
+            self.config.get("RawProcess_TimelagOptimization_Settings", "to_start_date"),
+            "",
+        )
 
 
 if __name__ == "__main__":

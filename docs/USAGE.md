@@ -65,7 +65,7 @@ eddypro-batch run [OPTIONS]
 | `--rot-meth` | 1, 3 | Rotation method (1=DR double rotation, 3=PF planar fit) |
 | `--tlag-meth` | 2, 4 | Time lag method (2=CMD constant minimum delay, 4=AO automatic optimization) |
 | `--detrend-meth` | 0, 1 | Detrend method (0=BA block averaging, 1=LD linear detrending) |
-| `--despike-vm` | 0, 1 | Spike removal method (0=VM97 Vickers & Mahrt 1997, 1=M13 Mauder et al. 2013) |
+| `--despike-meth` | 0, 1 | Spike removal method (0=VM97 Vickers & Mahrt 1997, 1=M13 Mauder et al. 2013) |
 
 **Examples:**
 
@@ -110,7 +110,7 @@ eddypro-batch scenarios [OPTIONS]
 | `--rot-meth N [N ...]` | int | Rotation methods to test (choices: 1, 3) |
 | `--tlag-meth N [N ...]` | int | Time lag methods to test (choices: 2, 4) |
 | `--detrend-meth N [N ...]` | int | Detrend methods to test (choices: 0, 1) |
-| `--despike-vm N [N ...]` | int | Spike removal methods to test (choices: 0, 1) |
+| `--despike-meth N [N ...]` | int | Spike removal methods to test (choices: 0, 1) |
 | `--max-scenarios N` | int | Maximum number of scenarios allowed (default: 32) |
 | `--site SITE_ID` | str | Site ID to process |
 | `--years YEAR [YEAR ...]` | int | Years to process |
@@ -130,7 +130,7 @@ eddypro-batch scenarios \
   --rot-meth 1 3 \
   --tlag-meth 2 4 \
   --detrend-meth 0 1 \
-  --despike-vm 0 1 \
+  --despike-meth 0 1 \
   --years 2021
 
 # Test with custom max scenarios limit

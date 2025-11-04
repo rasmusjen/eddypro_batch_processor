@@ -20,7 +20,7 @@ The following EddyPro INI parameters can be varied in scenario runs:
 | Rotation Method | `[RawProcess_Settings]` | `rot_meth` | 1, 3 | 1=DR (double rotation), 3=PF (planar fit) |
 | Time Lag Method | `[RawProcess_Settings]` | `tlag_meth` | 2, 4 | 2=CMD (constant minimum delay), 4=AO (automatic optimization) |
 | Detrend Method | `[RawProcess_Settings]` | `detrend_meth` | 0, 1 | 0=BA (block averaging), 1=LD (linear detrending) |
-| Spike Removal | `[RawProcess_ParameterSettings]` | `despike_vm` | 0, 1 | 0=VM97 (Vickers & Mahrt 1997), 1=M13 (Mauder et al. 2013) |
+| Spike Removal | `[RawProcess_ParameterSettings]` | `despike_meth` | 0, 1 | 0=VM97 (Vickers & Mahrt 1997), 1=M13 (Mauder et al. 2013) |
 
 ## Usage
 
@@ -67,7 +67,7 @@ eddypro-batch scenarios \
   --rot-meth 1 3 \
   --tlag-meth 2 4 \
   --detrend-meth 0 1 \
-  --despike-vm 0 1 \
+  --despike-meth 0 1 \
   --site GL-ZaF \
   --years 2021
 ```
@@ -202,7 +202,7 @@ Each scenario's `manifest.json` contains:
     "rot_meth": 1,
     "tlag_meth": 2,
     "detrend_meth": 0,
-    "despike_vm": 0
+    "despike_meth": 0
   },
   "project_file": "/path/to/GL-ZaF_2021_rot1_tlag2_det0_spk0.eddypro",
   "output_dir": "/path/to/output/_rot1_tlag2_det0_spk0",

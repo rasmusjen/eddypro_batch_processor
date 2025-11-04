@@ -65,19 +65,19 @@ def generate_scenario_suffix(parameters: dict[str, int]) -> str:
     Examples:
         >>> generate_scenario_suffix({"rot_meth": 1, "tlag_meth": 2})
         '_rot1_tlag2'
-        >>> generate_scenario_suffix({"rot_meth": 3, "despike_vm": 0})
+        >>> generate_scenario_suffix({"rot_meth": 3, "despike_meth": 0})
         '_rot3_spk0'
     """
     if not parameters:
         return ""
 
     # Define canonical ordering and abbreviations
-    param_order = ["rot_meth", "tlag_meth", "detrend_meth", "despike_vm"]
+    param_order = ["rot_meth", "tlag_meth", "detrend_meth", "despike_meth"]
     param_abbrev = {
         "rot_meth": "rot",
         "tlag_meth": "tlag",
         "detrend_meth": "det",
-        "despike_vm": "spk",
+        "despike_meth": "spk",
     }
 
     suffix_parts = []

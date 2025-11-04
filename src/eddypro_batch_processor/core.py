@@ -542,6 +542,9 @@ def run_single_scenario(
             scenario_suffix=scenario.suffix,
         )
 
+        # Conditionally patch date/time ranges based on rot_meth and tlag_meth
+        ini_tools.patch_conditional_date_ranges(ini_config, year=year)
+
         # Write final project file (no spaces around '=', LF endings)
         ini_tools.write_ini_file(ini_config, scenario_project_file)
 

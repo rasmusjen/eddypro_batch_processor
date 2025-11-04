@@ -136,7 +136,7 @@ Examples:
         help="Detrend method override (0=BA, 1=LD)",
     )
     run_parser.add_argument(
-        "--despike-vm",
+        "--despike-meth",
         type=int,
         choices=[0, 1],
         help="Spike removal method override (0=VM97, 1=M13)",
@@ -168,7 +168,7 @@ Examples:
         help="Detrend methods (0=BA, 1=LD)",
     )
     scenarios_parser.add_argument(
-        "--despike-vm",
+        "--despike-meth",
         nargs="+",
         type=int,
         choices=[0, 1],
@@ -254,8 +254,8 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         ini_parameters["tlag_meth"] = args.tlag_meth
     if args.detrend_meth is not None:
         ini_parameters["detrend_meth"] = args.detrend_meth
-    if args.despike_vm is not None:
-        ini_parameters["despike_vm"] = args.despike_vm
+    if args.despike_meth is not None:
+        ini_parameters["despike_meth"] = args.despike_meth
 
     # Validate INI parameters if any provided
     if ini_parameters:
@@ -497,8 +497,8 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
         parameter_options["tlag_meth"] = args.tlag_meth
     if args.detrend_meth:
         parameter_options["detrend_meth"] = args.detrend_meth
-    if args.despike_vm:
-        parameter_options["despike_vm"] = args.despike_vm
+    if args.despike_meth:
+        parameter_options["despike_meth"] = args.despike_meth
 
     if not parameter_options:
         logging.error(

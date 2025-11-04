@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Conditional date/time range population for EddyPro project files**
+  - Automatically populates date/time ranges when using Planar Fit (rot_meth=3) or time-lag optimization (tlag_meth=4)
+  - When `rot_meth=3` (Planar Fit): sets `pf_start_date`, `pf_end_date`, `pf_start_time`, `pf_end_time` to full-year ranges
+  - When `tlag_meth=4` (Covariance maximization with time-lag optimization): sets `to_start_date`, `to_end_date`, `to_start_time`, `to_end_time` to full-year ranges
+
+### Changed
+
+- **BREAKING: Renamed CLI parameter from `--despike-vm` to `--despike-meth`**
+  - Renamed for consistency with other parameter naming (rot_meth, tlag_meth, detrend_meth)
+  - Python parameter name changed from `despike_vm` to `despike_meth` throughout codebase
+  - INI file key remains `despike_vm` for compatibility with EddyPro
+  - CLI usage: `eddypro-batch run --despike-meth 0` (previously `--despike-vm 0`)
+  - Scenarios: `eddypro-batch scenarios --despike-meth 0 1` (previously `--despike-vm 0 1`)
+  - Date ranges are automatically set to January 1 - December 31 for the processing year
+  - Ensures EddyPro has sufficient data for planar fit calculations and time-lag optimization
+  - New function `patch_conditional_date_ranges` in `ini_tools.py` with comprehensive test coverage
+
 - **Machine-readable output file tracking in run manifests**
   - Run manifests now include `output_files` field with absolute paths to all EddyPro output CSV files
   - Tracks four file types: fluxnet, full_output, metadata, and qc_details
@@ -66,7 +83,7 @@ Users on Python 3.8 or 3.9 should:
     - Comprehensive error handling and logging at each stage
     - Report and manifest generation after processing
   - Implemented full `cmd_scenarios()` function for Cartesian product scenario execution
-    - Multi-parameter scenario generation (rot_meth × tlag_meth × detrend_meth × despike_vm)
+    - Multi-parameter scenario generation (rot_meth × tlag_meth × detrend_meth × despike_meth)
     - Scenario cap enforcement (32 combinations limit)
     - Custom manifest generation with actual scenario results
     - Individual scenario tracking with success/failure status
@@ -154,7 +171,7 @@ Users on Python 3.8 or 3.9 should:
   - Scenario execution functions in `core.py` (`run_single_scenario`, `run_scenario_batch`)
   - Per-scenario manifest generation with execution metadata
   - Comprehensive test suite with 25 tests achieving 100% coverage on scenarios module
-  - Support for CLI parameter specification: `--rot-meth`, `--tlag-meth`, `--detrend-meth`, `--despike-vm`
+  - Support for CLI parameter specification: `--rot-meth`, `--tlag-meth`, `--detrend-meth`, `--despike-meth`
   - Scenario summary formatting for user feedback
 
 ## [0.1.0] - 2024-10-01

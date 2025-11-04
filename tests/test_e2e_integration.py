@@ -94,7 +94,7 @@ tlag_meth = 2
 detrend_meth = 0
 
 [RawProcess_ParameterSettings]
-despike_vm = 0
+despike_meth = 0
 """
         template_path.write_text(content)
         return template_path
@@ -359,7 +359,7 @@ despike_vm = 0
                 "--detrend-meth",
                 "0",
                 "1",  # 2 values
-                "--despike-vm",
+                "--despike-meth",
                 "0",
                 "1",  # 2 values
                 # Total: 2×2×2×2×2 = 32 scenarios (at the cap)

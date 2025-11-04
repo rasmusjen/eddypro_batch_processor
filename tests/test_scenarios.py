@@ -25,7 +25,7 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
             "rot_meth": 1,
             "tlag_meth": 2,
             "detrend_meth": 0,
-            "despike_vm": 1,
+            "despike_meth": 1,
         }
         suffix = scenarios.generate_scenario_suffix(params)
         self.assertEqual(suffix, "_rot1_tlag2_det0_spk1")
@@ -33,8 +33,8 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
     def test_parameters_order_independence(self):
         """Test that parameter order doesn't affect suffix."""
         # Define parameters in different orders
-        params1 = {"despike_vm": 0, "rot_meth": 3}
-        params2 = {"rot_meth": 3, "despike_vm": 0}
+        params1 = {"despike_meth": 0, "rot_meth": 3}
+        params2 = {"rot_meth": 3, "despike_meth": 0}
 
         suffix1 = scenarios.generate_scenario_suffix(params1)
         suffix2 = scenarios.generate_scenario_suffix(params2)
@@ -120,7 +120,7 @@ class TestScenarioGeneration(unittest.TestCase):
 
     def test_deterministic_ordering(self):
         """Test that scenario generation is deterministic."""
-        opts = {"rot_meth": [1, 3], "despike_vm": [0, 1]}
+        opts = {"rot_meth": [1, 3], "despike_meth": [0, 1]}
 
         # Generate scenarios multiple times
         scenarios1 = scenarios.generate_scenarios(opts)
@@ -144,7 +144,7 @@ class TestScenarioCapEnforcement(unittest.TestCase):
             "rot_meth": [1, 3],
             "tlag_meth": [2, 4],
             "detrend_meth": [0, 1],
-            "despike_vm": [0, 1, 2, 3],  # Hypothetical extra values
+            "despike_meth": [0, 1, 2, 3],  # Hypothetical extra values
         }
 
         # Should succeed (or adjust to actual valid values)
@@ -153,7 +153,7 @@ class TestScenarioCapEnforcement(unittest.TestCase):
             "rot_meth": [1, 3],
             "tlag_meth": [2, 4],
             "detrend_meth": [0, 1],
-            "despike_vm": [0, 1],
+            "despike_meth": [0, 1],
         }
         scenario_list = scenarios.generate_scenarios(opts, max_scenarios=16)
         self.assertEqual(len(scenario_list), 16)
@@ -165,7 +165,7 @@ class TestScenarioCapEnforcement(unittest.TestCase):
             "rot_meth": [1, 3],
             "tlag_meth": [2, 4],
             "detrend_meth": [0, 1],
-            "despike_vm": [0, 1],
+            "despike_meth": [0, 1],
         }
 
         # Set a low cap to test enforcement

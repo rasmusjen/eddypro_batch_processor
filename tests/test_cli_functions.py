@@ -51,7 +51,7 @@ report_charts: none
             rot_meth=None,
             tlag_meth=None,
             detrend_meth=None,
-            despike_vm=None,
+            despike_meth=None,
         )
 
         result = cmd_run(args)
@@ -87,7 +87,7 @@ report_charts: none
             rot_meth=None,
             tlag_meth=None,
             detrend_meth=None,
-            despike_vm=None,
+            despike_meth=None,
         )
 
         result = cmd_run(args)
@@ -122,7 +122,7 @@ report_charts: none
             rot_meth=None,
             tlag_meth=None,
             detrend_meth=None,
-            despike_vm=None,
+            despike_meth=None,
         )
 
         result = cmd_run(args)
@@ -157,7 +157,7 @@ report_charts: none
             rot_meth=None,
             tlag_meth=None,
             detrend_meth=None,
-            despike_vm=None,
+            despike_meth=None,
         )
 
         result = cmd_run(args)
@@ -169,7 +169,7 @@ report_charts: none
             rot_meth=None,
             tlag_meth=None,
             detrend_meth=None,
-            despike_vm=None,
+            despike_meth=None,
             max_scenarios=32,
             site=None,
             years=None,
@@ -191,7 +191,7 @@ report_charts: none
             rot_meth=[1, 3],
             tlag_meth=[2, 4],
             detrend_meth=[0, 1],
-            despike_vm=[0, 1],
+            despike_meth=[0, 1],
             max_scenarios=32,
             site=None,
             years=None,

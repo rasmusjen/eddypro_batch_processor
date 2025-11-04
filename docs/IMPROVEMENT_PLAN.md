@@ -39,9 +39,9 @@ Introduce a dedicated CLI entry point with subcommands. Keep `src/eddypro_batch_
   - `run` – process site/years according to config and/or overrides
     - Options: `--config`, `--site`, `--years 2021 2022`, `--input-dir-pattern`, `--output-dir-pattern`,
       `--eddypro-exe`, `--stream-output`, `--mp`, `--max-proc`, `--dry-run`, `--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}`
-    - Scenario overrides: `--rot-meth`, `--tlag-meth`, `--detrend-meth`, `--despike-vm`
+    - Scenario overrides: `--rot-meth`, `--tlag-meth`, `--detrend-meth`, `--despike-meth`
   - `scenarios` – enumerate and run Cartesian product of supplied INI parameter values
-    - Options: `--rot-meth 1 3`, `--tlag-meth 2 4`, `--detrend-meth 0 1`, `--despike-vm 0 1`, `--year 2021`, `--site GL-ZaF`
+    - Options: `--rot-meth 1 3`, `--tlag-meth 2 4`, `--detrend-meth 0 1`, `--despike-meth 0 1`, `--year 2021`, `--site GL-ZaF`
   - `validate` – validate config and environment (required keys, path existence, ECMD CSV schema + minimal sanity checks)
   - `status` – summarize last run results from provenance/manifest
 
@@ -81,13 +81,13 @@ Implement a focused INI manipulation module to programmatically set specific par
   - Rotation: `rot_meth` in `[RawProcess_Settings]` → 1=DR (double rotation), 3=PF (planar fit)
   - Time lag compensation: `tlag_meth` in `[RawProcess_Settings]` → 2=CMD, 4=AO
   - Detrend: `detrend_meth` in `[RawProcess_Settings]` → 0=BA, 1=LD
-  - Spike removal: `despike_vm` in `[RawProcess_ParameterSettings]` → 0=VM97, 1=M13
+  - Spike removal: `despike_meth` in `[RawProcess_ParameterSettings]` → 0=VM97, 1=M13
 
 - Design
   - Read template via `configparser`, then patch only the keys that were provided (leave others intact).
   - Ensure type-safety and validation with friendly messages.
   - Validation policy
-    - Allowed values: `rot_meth` ∈ {1, 3}; `tlag_meth` ∈ {2, 4}; `detrend_meth` ∈ {0, 1}; `despike_vm` ∈ {0, 1}.
+    - Allowed values: `rot_meth` ∈ {1, 3}; `tlag_meth` ∈ {2, 4}; `detrend_meth` ∈ {0, 1}; `despike_meth` ∈ {0, 1}.
     - If a CLI override is outside the allowed set, error and abort the run (non-zero exit). No coercion or skipping.
 
 - Scenario engine
@@ -294,7 +294,7 @@ Milestone 2: CLI skeleton and package structure
 Milestone 3: INI parameterization utilities
 
 - Tasks
-  - [x] Implement `ini_tools.py` to patch: `rot_meth`, `tlag_meth`, `detrend_meth`, `despike_vm`
+  - [x] Implement `ini_tools.py` to patch: `rot_meth`, `tlag_meth`, `detrend_meth`, `despike_meth`
   - [x] Enforce validation policy (allowed sets; abort on invalid)
   - [x] Integrate overrides into `run` command flow
 - Deliverables

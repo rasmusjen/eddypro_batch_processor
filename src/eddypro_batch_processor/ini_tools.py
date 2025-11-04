@@ -31,11 +31,18 @@ PARAMETER_VALIDATION: dict[str, dict[str, Any]] = {
         "allowed_values": {0, 1},
         "description": "Detrend method (0=BA, 1=LD)",
     },
-    "despike_vm": {
+    "despike_meth": {
         "section": "RawProcess_ParameterSettings",
         "allowed_values": {0, 1},
         "description": "Spike removal method (0=VM97, 1=M13)",
+        "ini_key": "despike_vm",  # INI file uses legacy key name
     },
+}
+
+# Mapping from Python parameter names to INI key names
+# (only needed when they differ)
+PARAMETER_INI_KEY_MAP: dict[str, str] = {
+    "despike_meth": "despike_vm",
 }
 
 
@@ -162,9 +169,12 @@ def patch_ini_parameters(
                 f"for parameter '{param_name}'"
             )
 
+        # Get INI key name (may differ from Python parameter name)
+        ini_key = PARAMETER_INI_KEY_MAP.get(param_name, param_name)
+
         # Set the parameter value
-        config.set(section_name, param_name, str(value))
-        logger.debug(f"Set {section_name}.{param_name} = {value}")
+        config.set(section_name, ini_key, str(value))
+        logger.debug(f"Set {section_name}.{ini_key} = {value}")
 
 
 def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None:
@@ -254,6 +264,109 @@ def patch_ini_paths(
         out_path_normalized,
         data_path_normalized,
     )
+
+
+def patch_conditional_date_ranges(
+    config: configparser.ConfigParser,
+    *,
+    year: int,
+) -> None:
+    """Conditionally populate date/time ranges based on processing methods.
+
+    When rot_meth=3 (Planar Fit), populates pf_start_date/pf_end_date/
+    pf_start_time/pf_end_time with full-year ranges in
+    [RawProcess_TiltCorrection_Settings].
+
+    When tlag_meth=4 (Covariance maximization with time-lag optimization),
+    populates to_start_date/to_end_date/to_start_time/to_end_time with
+    full-year ranges in [RawProcess_TimelagOptimization_Settings].
+
+    Args:
+        config: Parsed INI configuration to modify in-place
+        year: Processing year to use for date range (YYYY-01-01 to YYYY-12-31)
+
+    Raises:
+        INIParameterError: If required sections are missing when conditions
+            are met
+    """
+    # Check rot_meth for Planar Fit (value 3)
+    if config.has_section("RawProcess_Settings"):
+        rot_meth = config.getint("RawProcess_Settings", "rot_meth", fallback=None)
+        if rot_meth == 3:
+            if not config.has_section("RawProcess_TiltCorrection_Settings"):
+                raise INIParameterError(
+                    "rot_meth=3 (Planar Fit) requires section "
+                    "'RawProcess_TiltCorrection_Settings' in template"
+                )
+
+            # Populate planar fit date/time range for the full year
+            config.set(
+                "RawProcess_TiltCorrection_Settings",
+                "pf_start_date",
+                f"{year}-01-01",
+            )
+            config.set(
+                "RawProcess_TiltCorrection_Settings",
+                "pf_end_date",
+                f"{year}-12-31",
+            )
+            config.set("RawProcess_TiltCorrection_Settings", "pf_start_time", "00:00")
+            config.set("RawProcess_TiltCorrection_Settings", "pf_end_time", "23:59")
+
+            logger.debug(
+                "rot_meth=3: Populated planar fit date range for year %d "
+                "(pf_start_date=%s-%02d-%02d, pf_end_date=%s-%02d-%02d)",
+                year,
+                year,
+                1,
+                1,
+                year,
+                12,
+                31,
+            )
+
+    # Check tlag_meth for time-lag optimization (value 4)
+    if config.has_section("RawProcess_Settings"):
+        tlag_meth = config.getint("RawProcess_Settings", "tlag_meth", fallback=None)
+        if tlag_meth == 4:
+            if not config.has_section("RawProcess_TimelagOptimization_Settings"):
+                raise INIParameterError(
+                    "tlag_meth=4 (time-lag optimization) requires section "
+                    "'RawProcess_TimelagOptimization_Settings' in template"
+                )
+
+            # Populate time-lag optimization date/time range for the full year
+            config.set(
+                "RawProcess_TimelagOptimization_Settings",
+                "to_start_date",
+                f"{year}-01-01",
+            )
+            config.set(
+                "RawProcess_TimelagOptimization_Settings",
+                "to_end_date",
+                f"{year}-12-31",
+            )
+            config.set(
+                "RawProcess_TimelagOptimization_Settings",
+                "to_start_time",
+                "00:00",
+            )
+            config.set(
+                "RawProcess_TimelagOptimization_Settings", "to_end_time", "23:59"
+            )
+
+            logger.debug(
+                "tlag_meth=4: Populated time-lag optimization date range "
+                "for year %d (to_start_date=%s-%02d-%02d, "
+                "to_end_date=%s-%02d-%02d)",
+                year,
+                year,
+                1,
+                1,
+                year,
+                12,
+                31,
+            )
 
 
 def patch_project_metadata(
@@ -491,7 +604,7 @@ def generate_scenario_suffix(parameters: dict[str, int]) -> str:
             "rot_meth": "rot",
             "tlag_meth": "tlag",
             "detrend_meth": "det",
-            "despike_vm": "spk",
+            "despike_meth": "spk",
         }
         short_name = short_names.get(param_name, param_name)
         suffix_parts.append(f"{short_name}{value}")
