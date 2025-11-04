@@ -66,6 +66,7 @@ eddypro-batch run [OPTIONS]
 | `--tlag-meth` | 2, 4 | Time lag method (2=CMD constant minimum delay, 4=AO automatic optimization) |
 | `--detrend-meth` | 0, 1 | Detrend method (0=BA block averaging, 1=LD linear detrending) |
 | `--despike-meth` | 0, 1 | Spike removal method (0=VM97 Vickers & Mahrt 1997, 1=M13 Mauder et al. 2013) |
+| `--hf-meth` | 1, 4 | High-frequency spectral correction (1=Moncrieff et al. 1997 analytic, 4=Fratini et al. 2012 in situ/analytic) |
 
 **Examples:**
 
@@ -111,6 +112,7 @@ eddypro-batch scenarios [OPTIONS]
 | `--tlag-meth N [N ...]` | int | Time lag methods to test (choices: 2, 4) |
 | `--detrend-meth N [N ...]` | int | Detrend methods to test (choices: 0, 1) |
 | `--despike-meth N [N ...]` | int | Spike removal methods to test (choices: 0, 1) |
+| `--hf-meth N [N ...]` | int | High-frequency correction methods to test (choices: 1, 4) |
 | `--max-scenarios N` | int | Maximum number of scenarios allowed (default: 32) |
 | `--site SITE_ID` | str | Site ID to process |
 | `--years YEAR [YEAR ...]` | int | Years to process |
@@ -125,12 +127,21 @@ eddypro-batch scenarios --rot-meth 1 3 --site GL-ZaF --years 2021
 # Test combination of rotation and time lag methods
 eddypro-batch scenarios --rot-meth 1 3 --tlag-meth 2 4 --years 2021
 
-# Test all four parameters (4 combinations)
+# Test all four parameters (16 combinations)
 eddypro-batch scenarios \
   --rot-meth 1 3 \
   --tlag-meth 2 4 \
   --detrend-meth 0 1 \
   --despike-meth 0 1 \
+  --years 2021
+
+# Test all five parameters (32 combinations - maximum by default)
+eddypro-batch scenarios \
+  --rot-meth 1 3 \
+  --tlag-meth 2 4 \
+  --detrend-meth 0 1 \
+  --despike-meth 0 1 \
+  --hf-meth 1 4 \
   --years 2021
 
 # Test with custom max scenarios limit

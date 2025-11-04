@@ -29,6 +29,8 @@ class TestParameterValidation(unittest.TestCase):
             ("detrend_meth", 1),
             ("despike_meth", 0),
             ("despike_meth", 1),
+            ("hf_meth", 1),
+            ("hf_meth", 4),
         ]
 
         for param_name, value in test_cases:
@@ -49,6 +51,9 @@ class TestParameterValidation(unittest.TestCase):
             ("detrend_meth", 2),
             ("despike_meth", -1),
             ("despike_meth", 2),
+            ("hf_meth", 0),
+            ("hf_meth", 2),
+            ("hf_meth", 3),
         ]
 
         for param_name, value in test_cases:
@@ -100,7 +105,13 @@ class TestParameterValidation(unittest.TestCase):
         info = ini_tools.get_parameter_info()
 
         # Check that all expected parameters are present
-        expected_params = {"rot_meth", "tlag_meth", "detrend_meth", "despike_meth"}
+        expected_params = {
+            "rot_meth",
+            "tlag_meth",
+            "detrend_meth",
+            "despike_meth",
+            "hf_meth",
+        }
         self.assertEqual(set(info.keys()), expected_params)
 
         # Check structure of parameter info
@@ -361,6 +372,17 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
         # despike_meth, detrend_meth, rot_meth, tlag_meth
         expected = "_spk0_det1_rot3_tlag4"
         self.assertEqual(result, expected)
+
+    def test_generate_scenario_suffix_with_hf_meth(self):
+        """Suffix should include hf when hf_meth provided (alphabetical order)."""
+        parameters = {
+            "rot_meth": 1,
+            "hf_meth": 4,
+            "tlag_meth": 2,
+        }
+        result = ini_tools.generate_scenario_suffix(parameters)
+        # Alphabetical order of keys: hf_meth, rot_meth, tlag_meth -> hf, rot, tlag
+        self.assertEqual(result, "_hf4_rot1_tlag2")
 
     def test_generate_scenario_suffix_deterministic(self):
         """Test that suffix generation is deterministic."""

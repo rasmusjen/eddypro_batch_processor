@@ -141,6 +141,15 @@ Examples:
         choices=[0, 1],
         help="Spike removal method override (0=VM97, 1=M13)",
     )
+    run_parser.add_argument(
+        "--hf-meth",
+        type=int,
+        choices=[1, 4],
+        help=(
+            "High-frequency spectral correction method override "
+            "(1=Moncrieff 1997 analytic, 4=Fratini 2012 in situ/analytic)"
+        ),
+    )
 
     # Scenarios command
     scenarios_parser = subparsers.add_parser(
@@ -173,6 +182,16 @@ Examples:
         type=int,
         choices=[0, 1],
         help="Spike removal methods (0=VM97, 1=M13)",
+    )
+    scenarios_parser.add_argument(
+        "--hf-meth",
+        nargs="+",
+        type=int,
+        choices=[1, 4],
+        help=(
+            "High-frequency spectral correction methods "
+            "(1=Moncrieff 1997 analytic, 4=Fratini 2012 in situ/analytic)"
+        ),
     )
     scenarios_parser.add_argument(
         "--max-scenarios",
@@ -256,6 +275,8 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         ini_parameters["detrend_meth"] = args.detrend_meth
     if args.despike_meth is not None:
         ini_parameters["despike_meth"] = args.despike_meth
+    if getattr(args, "hf_meth", None) is not None:
+        ini_parameters["hf_meth"] = args.hf_meth
 
     # Validate INI parameters if any provided
     if ini_parameters:
@@ -499,6 +520,8 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
         parameter_options["detrend_meth"] = args.detrend_meth
     if args.despike_meth:
         parameter_options["despike_meth"] = args.despike_meth
+    if args.hf_meth:
+        parameter_options["hf_meth"] = args.hf_meth
 
     if not parameter_options:
         logging.error(

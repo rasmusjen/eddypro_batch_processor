@@ -87,6 +87,12 @@ class TestEndToEndIntegration:
         template_path = tmp_path / "EddyProProject_template.ini"
         content = """[Project]
 project_title = Test Project
+file_name = test_project.eddypro
+
+[RawProcess_General]
+data_path = /path/to/data
+recurse = 1
+out_path = /path/to/output
 
 [RawProcess_Settings]
 rot_meth = 1

@@ -30,6 +30,17 @@ class TestScenarioSuffixGeneration(unittest.TestCase):
         suffix = scenarios.generate_scenario_suffix(params)
         self.assertEqual(suffix, "_rot1_tlag2_det0_spk1")
 
+    def test_suffix_includes_hf_meth(self):
+        """Suffix should include hf when hf_meth present and follow order list."""
+        params = {
+            "rot_meth": 3,
+            "hf_meth": 1,
+            "tlag_meth": 4,
+        }
+        suffix = scenarios.generate_scenario_suffix(params)
+        # Canonical order in scenarios module is rot, tlag, det, spk, hf
+        self.assertEqual(suffix, "_rot3_tlag4_hf1")
+
     def test_parameters_order_independence(self):
         """Test that parameter order doesn't affect suffix."""
         # Define parameters in different orders

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **High-frequency spectral correction method parameter (`--hf-meth`)**
+  - New CLI parameter for controlling EddyPro's high-frequency spectral correction method
+  - Valid values: 1 (Moncrieff et al. 1997 analytic) or 4 (Fratini et al. 2012 in situ/analytic, default in template)
+  - Available in both `run` and `scenarios` commands
+  - Extends scenario matrix from 16 to 32 possible combinations (2×2×2×2×2)
+  - Parameter written to `[Project]` section as `hf_meth` in generated INI files
+  - Full test coverage and documentation updates
+
 - **Conditional date/time range population for EddyPro project files**
   - Automatically populates date/time ranges when using Planar Fit (rot_meth=3) or time-lag optimization (tlag_meth=4)
   - When `rot_meth=3` (Planar Fit): sets `pf_start_date`, `pf_end_date`, `pf_start_time`, `pf_end_time` to full-year ranges

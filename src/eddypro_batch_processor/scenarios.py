@@ -72,12 +72,19 @@ def generate_scenario_suffix(parameters: dict[str, int]) -> str:
         return ""
 
     # Define canonical ordering and abbreviations
-    param_order = ["rot_meth", "tlag_meth", "detrend_meth", "despike_meth"]
+    param_order = [
+        "rot_meth",
+        "tlag_meth",
+        "detrend_meth",
+        "despike_meth",
+        "hf_meth",
+    ]
     param_abbrev = {
         "rot_meth": "rot",
         "tlag_meth": "tlag",
         "detrend_meth": "det",
         "despike_meth": "spk",
+        "hf_meth": "hf",
     }
 
     suffix_parts = []

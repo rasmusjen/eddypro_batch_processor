@@ -37,6 +37,14 @@ PARAMETER_VALIDATION: dict[str, dict[str, Any]] = {
         "description": "Spike removal method (0=VM97, 1=M13)",
         "ini_key": "despike_vm",  # INI file uses legacy key name
     },
+    "hf_meth": {
+        "section": "Project",
+        "allowed_values": {1, 4},
+        "description": (
+            "High-frequency spectral correction method "
+            "(1=Moncrieff 1997 analytic, 4=Fratini 2012 in situ/analytic)"
+        ),
+    },
 }
 
 # Mapping from Python parameter names to INI key names
@@ -605,6 +613,7 @@ def generate_scenario_suffix(parameters: dict[str, int]) -> str:
             "tlag_meth": "tlag",
             "detrend_meth": "det",
             "despike_meth": "spk",
+            "hf_meth": "hf",
         }
         short_name = short_names.get(param_name, param_name)
         suffix_parts.append(f"{short_name}{value}")

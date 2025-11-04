@@ -82,18 +82,19 @@ Implement a focused INI manipulation module to programmatically set specific par
   - Time lag compensation: `tlag_meth` in `[RawProcess_Settings]` → 2=CMD, 4=AO
   - Detrend: `detrend_meth` in `[RawProcess_Settings]` → 0=BA, 1=LD
   - Spike removal: `despike_meth` in `[RawProcess_ParameterSettings]` → 0=VM97, 1=M13
+  - High-frequency correction: `hf_meth` in `[Project]` → 1=Moncrieff et al. (1997) analytic, 4=Fratini et al. (2012) in situ/analytic
 
 - Design
   - Read template via `configparser`, then patch only the keys that were provided (leave others intact).
   - Ensure type-safety and validation with friendly messages.
   - Validation policy
-    - Allowed values: `rot_meth` ∈ {1, 3}; `tlag_meth` ∈ {2, 4}; `detrend_meth` ∈ {0, 1}; `despike_meth` ∈ {0, 1}.
+    - Allowed values: `rot_meth` ∈ {1, 3}; `tlag_meth` ∈ {2, 4}; `detrend_meth` ∈ {0, 1}; `despike_meth` ∈ {0, 1}; `hf_meth` ∈ {1, 4}.
     - If a CLI override is outside the allowed set, error and abort the run (non-zero exit). No coercion or skipping.
 
 - Scenario engine
   - Input: mappings of parameter → list of values.
   - Build Cartesian product of combinations (small cap to avoid explosion e.g., `--max-scenarios`).
-  - For each scenario: write a unique project file name suffix (e.g., `_rot1_tlag2_det0_spk0`) and run.
+  - For each scenario: write a unique project file name suffix (e.g., `_rot1_tlag2_det0_spk0_hf4`) and run.
   - Store scenario metadata (params + run metadata + result paths + metrics) in a manifest JSON.
   - Limits: Hard cap of 32 combinations; if exceeded, the run errors out and instructs the user to narrow parameters.
 

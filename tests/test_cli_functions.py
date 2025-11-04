@@ -52,6 +52,7 @@ report_charts: none
             tlag_meth=None,
             detrend_meth=None,
             despike_meth=None,
+            hf_meth=None,
         )
 
         result = cmd_run(args)
@@ -88,6 +89,7 @@ report_charts: none
             tlag_meth=None,
             detrend_meth=None,
             despike_meth=None,
+            hf_meth=None,
         )
 
         result = cmd_run(args)
@@ -123,6 +125,7 @@ report_charts: none
             tlag_meth=None,
             detrend_meth=None,
             despike_meth=None,
+            hf_meth=None,
         )
 
         result = cmd_run(args)
@@ -158,6 +161,7 @@ report_charts: none
             tlag_meth=None,
             detrend_meth=None,
             despike_meth=None,
+            hf_meth=None,
         )
 
         result = cmd_run(args)
@@ -170,6 +174,7 @@ report_charts: none
             tlag_meth=None,
             detrend_meth=None,
             despike_meth=None,
+            hf_meth=None,
             max_scenarios=32,
             site=None,
             years=None,
@@ -192,6 +197,7 @@ report_charts: none
             tlag_meth=[2, 4],
             detrend_meth=[0, 1],
             despike_meth=[0, 1],
+            hf_meth=[1, 4],
             max_scenarios=32,
             site=None,
             years=None,
@@ -408,6 +414,11 @@ class TestCLIUtilityFunctions:
         args = parser.parse_args(["scenarios", "--rot-meth", "1", "3"])
         assert args.command == "scenarios"
         assert args.rot_meth == [1, 3]
+
+        # Test scenarios with hf-meth
+        args = parser.parse_args(["scenarios", "--hf-meth", "1", "4"])
+        assert args.command == "scenarios"
+        assert args.hf_meth == [1, 4]
 
         # Test validate subcommand
         args = parser.parse_args(["validate", "--skip-paths"])

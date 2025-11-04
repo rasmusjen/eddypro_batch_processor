@@ -21,6 +21,7 @@ The following EddyPro INI parameters can be varied in scenario runs:
 | Time Lag Method | `[RawProcess_Settings]` | `tlag_meth` | 2, 4 | 2=CMD (constant minimum delay), 4=AO (automatic optimization) |
 | Detrend Method | `[RawProcess_Settings]` | `detrend_meth` | 0, 1 | 0=BA (block averaging), 1=LD (linear detrending) |
 | Spike Removal | `[RawProcess_ParameterSettings]` | `despike_meth` | 0, 1 | 0=VM97 (Vickers & Mahrt 1997), 1=M13 (Mauder et al. 2013) |
+| High-Frequency Correction | `[Project]` | `hf_meth` | 1, 4 | 1=Moncrieff et al. (1997) analytic, 4=Fratini et al. (2012) in situ/analytic |
 
 ## Usage
 
@@ -74,6 +75,21 @@ eddypro-batch scenarios \
 
 This creates 2 × 2 × 2 × 2 = 16 scenarios with all possible combinations.
 
+**Test all five parameters (32 scenarios - maximum):**
+
+```bash
+eddypro-batch scenarios \
+  --rot-meth 1 3 \
+  --tlag-meth 2 4 \
+  --detrend-meth 0 1 \
+  --despike-meth 0 1 \
+  --hf-meth 1 4 \
+  --site GL-ZaF \
+  --years 2021
+```
+
+This creates 2 × 2 × 2 × 2 × 2 = 32 scenarios with all possible combinations (reaches the default limit).
+
 ## Naming Conventions
 
 ### Scenario Suffixes
@@ -81,7 +97,7 @@ This creates 2 × 2 × 2 × 2 = 16 scenarios with all possible combinations.
 Each scenario receives a unique suffix based on its parameter values:
 
 ```
-_rot{R}_tlag{T}_det{D}_spk{S}
+_rot{R}_tlag{T}_det{D}_spk{S}_hf{H}
 ```
 
 Where:
@@ -89,6 +105,7 @@ Where:
 - `T` = time lag method value
 - `D` = detrend method value
 - `S` = despike method value
+- `H` = high-frequency correction method value
 
 Only parameters that vary across scenarios are included in the suffix.
 
