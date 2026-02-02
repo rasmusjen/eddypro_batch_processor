@@ -101,6 +101,10 @@ detrend_meth = 0
 
 [RawProcess_ParameterSettings]
 despike_meth = 0
+
+[FluxCorrection_SpectralAnalysis_General]
+sa_bin_spectra =
+sa_full_spectra =
 """
         template_path.write_text(content)
         return template_path

@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables automated post-processing and validation workflows
   - Files grouped by output directory with sorted absolute paths
 
+- **EddyPro project file population adjustments**
+  - `file_name` now points to `{output_dir}/{site_id}.eddypro`
+  - `proj_file` now points to `{output_dir}/{site_id}.metadata`
+  - `project_title` and `project_id` now set to `site_id` only
+  - `sa_bin_spectra` and `sa_full_spectra` now point to
+    `{output_dir}/eddypro_binned_cospectra` and `{output_dir}/eddypro_full_cospectra`
+  - INI writer now trims trailing empty lines
+
 ### ⚠️ BREAKING CHANGES
 
 - **Minimum Python version increased to 3.10**

@@ -415,6 +415,7 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
             data_path_value = input_pattern.format(year=year, site_id=site_id)
             ini_tools.patch_ini_paths(
                 ini_config,
+                site_id=site_id,
                 proj_file=str(output_dir / f"{site_id}.metadata"),
                 dyn_metadata_file=str(output_dir / f"{site_id}_dynamic_metadata.txt"),
                 data_path=data_path_value,

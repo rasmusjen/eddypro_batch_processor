@@ -528,6 +528,7 @@ def run_single_scenario(
         # Patch all path fields (normalized to forward slashes)
         ini_tools.patch_ini_paths(
             ini_config,
+            site_id=site_id,
             proj_file=str(scenario_output_dir / metadata_filename),
             dyn_metadata_file=str(scenario_output_dir / dyn_metadata_filename),
             data_path=data_path_value,

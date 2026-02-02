@@ -7,6 +7,7 @@ Supports patching specific parameters while preserving the rest of the template.
 """
 
 import configparser
+import io
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -190,7 +191,8 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
     Write INI configuration to file.
 
     Writes with no spaces around delimiters and LF line endings to match
-    EddyPro native format expectations.
+    EddyPro native format expectations. Includes the EddyPro header comment
+    that ConfigParser discards when reading.
 
     Args:
         config: ConfigParser object to write
@@ -205,7 +207,20 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
 
         # Write with no spaces around '=' and LF endings (EddyPro native format)
         with open(output_path, "w", encoding="utf-8", newline="\n") as f:
-            config.write(f, space_around_delimiters=False)
+            # Write the EddyPro header comment first
+            # (ConfigParser discards comments when reading, so we add it back)
+            f.write(";EDDYPRO_PROCESSING\n")
+
+            buffer = io.StringIO()
+            config.write(buffer, space_around_delimiters=False)
+            content = buffer.getvalue()
+
+            # Remove trailing empty lines while preserving a final newline
+            lines = content.splitlines()
+            while lines and not lines[-1].strip():
+                lines.pop()
+            if lines:
+                f.write("\n".join(lines) + "\n")
 
         logger.debug(f"Wrote INI file to {output_path}")
     except OSError as e:
@@ -215,6 +230,7 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
 def patch_ini_paths(
     config: configparser.ConfigParser,
     *,
+    site_id: str,
     proj_file: str,
     dyn_metadata_file: str,
     data_path: str,
@@ -226,6 +242,7 @@ def patch_ini_paths(
 
     Args:
         config: Parsed INI configuration to modify in-place
+        site_id: Site identifier (e.g., 'GL-ZaF')
         proj_file: Path to the static metadata file (.metadata)
         dyn_metadata_file: Path to the dynamic metadata file (.txt)
         data_path: Absolute path to input raw data
@@ -241,14 +258,21 @@ def patch_ini_paths(
         raise INIParameterError(
             "Required section 'RawProcess_General' missing from template"
         )
+    if not config.has_section("FluxCorrection_SpectralAnalysis_General"):
+        raise INIParameterError(
+            "Required section 'FluxCorrection_SpectralAnalysis_General' "
+            "missing from template"
+        )
 
     # Normalize all paths to forward slashes (EddyPro standard)
+    file_name_normalized = (Path(out_path) / f"{site_id}.eddypro").as_posix()
     proj_file_normalized = Path(proj_file).as_posix()
     dyn_metadata_file_normalized = Path(dyn_metadata_file).as_posix()
     data_path_normalized = Path(data_path).as_posix()
     out_path_normalized = Path(out_path).as_posix()
 
     # Project-level paths
+    config.set("Project", "file_name", file_name_normalized)
     config.set("Project", "proj_file", proj_file_normalized)
     config.set("Project", "dyn_metadata_file", dyn_metadata_file_normalized)
     config.set("Project", "out_path", out_path_normalized)
@@ -264,13 +288,31 @@ def patch_ini_paths(
     # Input data path
     config.set("RawProcess_General", "data_path", data_path_normalized)
 
+    # Spectral analysis output paths
+    config.set(
+        "FluxCorrection_SpectralAnalysis_General",
+        "sa_bin_spectra",
+        (Path(out_path) / "eddypro_binned_cospectra").as_posix(),
+    )
+    config.set(
+        "FluxCorrection_SpectralAnalysis_General",
+        "sa_full_spectra",
+        (Path(out_path) / "eddypro_full_cospectra").as_posix(),
+    )
+
     logger.debug(
-        "Patched paths: Project.proj_file=%s, Project.dyn_metadata_file=%s, "
-        "Project.out_path=%s, RawProcess_General.data_path=%s",
+        "Patched paths: Project.file_name=%s, Project.proj_file=%s, "
+        "Project.dyn_metadata_file=%s, Project.out_path=%s, "
+        "RawProcess_General.data_path=%s, "
+        "FluxCorrection_SpectralAnalysis_General.sa_bin_spectra=%s, "
+        "FluxCorrection_SpectralAnalysis_General.sa_full_spectra=%s",
+        file_name_normalized,
         proj_file_normalized,
         dyn_metadata_file_normalized,
         out_path_normalized,
         data_path_normalized,
+        (Path(out_path) / "eddypro_binned_cospectra").as_posix(),
+        (Path(out_path) / "eddypro_full_cospectra").as_posix(),
     )
 
 
@@ -401,6 +443,8 @@ def patch_project_metadata(
     if not config.has_section("Project"):
         raise INIParameterError("Required section 'Project' missing from template")
 
+    _ = year, scenario_suffix
+
     # Get current timestamp in EddyPro format: YYYY-MM-DDTHH:MM:SS
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -411,24 +455,17 @@ def patch_project_metadata(
     # Always update last_change_date to current time
     config.set("Project", "last_change_date", now)
 
-    # Set project_title: "<site_id> <year>" or with scenario suffix
-    if scenario_suffix:
-        project_title = f"{site_id} {year}{scenario_suffix}"
-    else:
-        project_title = f"{site_id} {year}"
-    config.set("Project", "project_title", project_title)
-
-    # Set project_id: "<site_id>_<year>"
-    project_id = f"{site_id}_{year}"
-    config.set("Project", "project_id", project_id)
+    # Set project_title and project_id to site_id only
+    config.set("Project", "project_title", site_id)
+    config.set("Project", "project_id", site_id)
 
     logger.debug(
         "Patched Project metadata: creation_date=%s, last_change_date=%s, "
         "project_title=%s, project_id=%s",
         config.get("Project", "creation_date"),
         now,
-        project_title,
-        project_id,
+        site_id,
+        site_id,
     )
 
 

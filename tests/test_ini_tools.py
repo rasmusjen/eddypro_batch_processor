@@ -232,6 +232,11 @@ despike_meth=0
             config.get("RawProcess_Settings", "rot_meth"),
         )
 
+        # Ensure no trailing empty line
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(lines)
+        self.assertTrue(lines[-1].strip())
+
     def test_write_ini_file_creates_directories(self):
         """Test that write_ini_file creates output directories."""
         config = ini_tools.read_ini_template(self.template_path)
@@ -299,21 +304,52 @@ despike_meth=0
         # Ensure required sections exist in our minimal test INI by adding them
         if not config.has_section("Project"):
             config.add_section("Project")
+        if not config.has_section("FluxCorrection_SpectralAnalysis_General"):
+            config.add_section("FluxCorrection_SpectralAnalysis_General")
         if not config.has_section("RawProcess_General"):
             config.add_section("RawProcess_General")
 
         ini_tools.patch_ini_paths(
             config,
+            site_id="SITE",
             proj_file=proj_file,
             dyn_metadata_file=dyn_md,
             data_path=data_path,
             out_path=out_path,
         )
 
-        self.assertEqual(config.get("Project", "proj_file"), proj_file)
+        expected_metadata_path = f"{out_path}/SITE.metadata"
+        self.assertEqual(config.get("Project", "file_name"), f"{out_path}/SITE.eddypro")
+        self.assertEqual(config.get("Project", "proj_file"), expected_metadata_path)
         self.assertEqual(config.get("Project", "dyn_metadata_file"), dyn_md)
         self.assertEqual(config.get("Project", "out_path"), out_path)
         self.assertEqual(config.get("RawProcess_General", "data_path"), data_path)
+        self.assertEqual(
+            config.get("FluxCorrection_SpectralAnalysis_General", "sa_bin_spectra"),
+            f"{out_path}/eddypro_binned_cospectra",
+        )
+        self.assertEqual(
+            config.get("FluxCorrection_SpectralAnalysis_General", "sa_full_spectra"),
+            f"{out_path}/eddypro_full_cospectra",
+        )
+
+    def test_patch_project_metadata_sets_site_id_fields(self):
+        """Project title and ID should be set to site_id."""
+        config = configparser.ConfigParser()
+        config.add_section("Project")
+        config.set("Project", "creation_date", "")
+
+        ini_tools.patch_project_metadata(
+            config,
+            site_id="GL-ZaF",
+            year=2021,
+            scenario_suffix="_rot1",
+        )
+
+        self.assertEqual(config.get("Project", "project_title"), "GL-ZaF")
+        self.assertEqual(config.get("Project", "project_id"), "GL-ZaF")
+        self.assertTrue(config.get("Project", "creation_date").strip())
+        self.assertTrue(config.get("Project", "last_change_date").strip())
 
     def test_validate_eddypro_metadata(self):
         """Ensure metadata validation passes for a valid template file."""

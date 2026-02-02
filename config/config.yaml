@@ -4,9 +4,9 @@
 eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
 
 # Specify the site ID you want to process
-site_id: GL-ZaF
+#site_id: GL-ZaF
 #site_id: GL-ZaH
-#site_id: GL-Dsk
+site_id: GL-Dsk
 #site_id: GL-NuF
 #site_id: GL-NuH
 
@@ -34,22 +34,22 @@ years_to_process:
   #- 2018
   #- 2019
   #- 2020
-  - 2021
+  #- 2021
   #- 2022
   #- 2023
   #- 2024
-
+  - 2025
 # Input directory pattern for each year and site
 # Use `{year}` and `{site_id}` as placeholders
 #input_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/raw/{site_id}/{year}"
 
-input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
+input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv/test"
 
 # Output directory pattern for each year and site
 # Use `{year}` and `{site_id}` as placeholders
 #output_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/processed/{site_id}/{year}"
 
-output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux/test"
+output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux"
 
 # Path to the ECMD CSV file
 #ecmd_file: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/GL-ZaF_ecmd.csv"
