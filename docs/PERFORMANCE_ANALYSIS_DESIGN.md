@@ -14,6 +14,16 @@ The system currently collects (via `monitor.py`):
 ### The Missing Piece
 What is currently missing is **contextual interpretation**. We have raw numbers, but they don't immediately tell a user if the run was "slow due to disk speed" or "slow due to CPU saturation."
 
+### Run Types This Design Must Cover
+To avoid ambiguity and ensure consistent reporting, the analysis pipeline must treat all runs the same way:
+
+| Run Type | Definition | Expected Reports |
+|:---|:---|:---|
+| **Regular run** | `eddypro-batch run --site --years` with optional parameter overrides | **One scenario report** (baseline) + **one run summary report** |
+| **Scenario run** | `eddypro-batch scenarios ...` (Cartesian product) | **One report per scenario** + **one aggregated run summary report** |
+
+**Key rule:** A regular run is modeled as a single **baseline scenario** for analysis and reporting. This makes the analysis API uniform and keeps the report generator simple.
+
 ---
 
 ## 2. Bottleneck Classification Logic
@@ -84,6 +94,29 @@ If running multiple scenarios (e.g., `_rot1` vs `_rot3`), a heatmap allows quick
 
 *Interpretation: Planar Fit (`rot3`) + Time Lag Optimization (`tlag4`) is computationally expensive.*
 
+### D. Per-Scenario Reports (Scenario Runs)
+
+Scenario runs require full per-scenario reports in addition to the aggregated summary. Each scenario report should include:
+
+- Scenario metadata (parameters, year, output directory)
+- Performance traffic-light table for that scenario
+- Time-series charts for CPU, memory, and disk I/O
+- Scenario-level metrics summary and bottleneck classification
+
+**Location:**
+
+```
+{output_dir}/{scenario_suffix}/reports/run_report.html
+```
+
+### E. Aggregate Run Summary (All Runs)
+
+All runs (regular and scenario) must end with a **run-level summary report** that aggregates scenario analyses into a single comparison view:
+
+- Scenario comparison table (duration, averages, bottleneck classification)
+- Aggregate bottleneck roll-up (e.g., most common limiting factor)
+- Links to each per-scenario report (if scenario run)
+
 ---
 
 ## 4. Implementation Plan
@@ -103,6 +136,10 @@ Goal: Allow users to define what "slow" or "heavy" means for their specific hard
       disk_io_high_mb: 100  # Adjust based on HDD vs SSD
     ```
 
+3.  **Define Run/Scenario Report Model**:
+        - Regular runs are treated as a single **baseline scenario** with a synthetic scenario_id (e.g., `baseline`).
+        - Scenario runs produce N scenarios and an aggregate run report.
+
 ### Phase 2: Analysis Logic (New Module)
 
 Goal: Decouple analysis from reporting. Create a standardized way to digest `metrics.csv`.
@@ -115,6 +152,10 @@ Goal: Decouple analysis from reporting. Create a standardized way to digest `met
         *   Compute Aggregates: Mean, Max, P95 (95th percentile) for CPU, RAM, Disk Read/Write.
         *   Apply Heuristics: Compare aggregates against thresholds.
         *   Determine Status: Return `RED`, `YELLOW`, or `GREEN` and the "Primary Limiting Factor".
+
+3.  **Add Scenario Summary Model**:
+    - `ScenarioAnalysis` should carry per-scenario summary stats and bottleneck classification.
+    - This is used for per-scenario reports and for the aggregate report table.
 
 ### Phase 3: Visualization Enhancements (`report.py`)
 
@@ -129,6 +170,14 @@ Goal: Visualize the correlation between resources.
     *   Inject the "Traffic Light" HTML table at the top of the report template.
     *   Use the data from `ScenarioAnalysis` to populate the table.
 
+3.  **Per-Scenario Report Generation**:
+    *   Add a helper to generate a full report for each scenario.
+    *   Report location: `{output_dir}/{scenario_suffix}/reports/run_report.html`.
+
+4.  **Aggregate Summary Report**:
+    *   Use the scenario comparison matrix to summarize all scenarios.
+    *   Include links to each per-scenario report when applicable.
+
 ### Phase 4: Integration
 
 Goal: Connect the analysis engine to the CLI workflow.
@@ -140,6 +189,10 @@ Goal: Connect the analysis engine to the CLI workflow.
     *   Accept a list of `ScenarioAnalysis` objects.
     *   Pass these objects to the Jinja2 template (or string formatter).
 
+3.  **Report Orchestration Rules**:
+    *   Regular run → generate one scenario report (baseline) + one aggregate run summary.
+    *   Scenario run → generate one report per scenario + one aggregate run summary.
+
 ### Phase 5: Testing
 
 1.  **Unit Tests**:
@@ -149,6 +202,7 @@ Goal: Connect the analysis engine to the CLI workflow.
 2.  **Integration Tests**:
     *   Run a `dry-run` scenario that generates dummy metrics.
     *   Verify the HTML report contains the Performance Section.
+    *   Verify scenario runs generate per-scenario reports and a single aggregated summary.
 
 ### Task Checklist
 
@@ -157,4 +211,6 @@ Goal: Connect the analysis engine to the CLI workflow.
 - [ ] Add unit tests for bottleneck detection.
 - [ ] Update `report.py` to use subplots.
 - [ ] Update `report.py` to render the summary table.
+- [ ] Add per-scenario report generation for scenario runs.
+- [ ] Add aggregate summary report for all runs.
 - [ ] Verify with end-to-end run.

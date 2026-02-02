@@ -119,13 +119,47 @@ def test_cli_scenarios_stub():
     assert "Parameter options for scenarios:" in result.stdout
 
 
-def test_cli_run_dry_run_stub():
+def test_cli_run_dry_run_stub(tmp_path):
     """Test that run command accepts dry-run option and executes."""
+    ecmd_file = tmp_path / "ecmd.csv"
+    ecmd_file.write_text(
+        "DATE_OF_VARIATION_EF,SITEID,ALTITUDE,CANOPY_HEIGHT,LATITUDE,LONGITUDE,"
+        "ACQUISITION_FREQUENCY,FILE_DURATION,SA_HEIGHT,SA_WIND_DATA_FORMAT,"
+        "SA_NORTH_ALIGNEMENT,SA_NORTH_OFFSET,GA_TUBE_LENGTH,GA_TUBE_DIAMETER,"
+        "GA_FLOWRATE,GA_NORTHWARD_SEPARATION,GA_EASTWARD_SEPARATION,"
+        "GA_VERTICAL_SEPARATION\n"
+        "202001010000,test-site,10,0.5,1.0,2.0,10,30,3.1,uvw,spar,"
+        "60,71.1,5.3,12,-11,-18,0\n",
+        encoding="utf-8",
+    )
+
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        f"""
+site_id: test-site
+years_to_process: [2025]
+eddypro_executable: /fake/eddypro.exe
+input_dir_pattern: {tmp_path}/input/{{site_id}}/{{year}}
+output_dir_pattern: {tmp_path}/output/{{site_id}}/{{year}}
+ecmd_file: {ecmd_file}
+max_processes: 1
+multiprocessing: false
+stream_output: false
+log_level: INFO
+metrics_interval_seconds: 0.5
+reports_dir: null
+report_charts: none
+""",
+        encoding="utf-8",
+    )
+
     result = subprocess.run(
         [
             sys.executable,
             "-m",
             "eddypro_batch_processor.cli",
+            "--config",
+            str(config_file),
             "run",
             "--dry-run",
             "--site",

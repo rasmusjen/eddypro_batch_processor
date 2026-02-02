@@ -44,6 +44,110 @@ def parse_ecmd_date(date_str: str) -> datetime:
         _raise_parse_error(date_str, e)
 
 
+ECMD_METADATA_COLUMNS: tuple[str, ...] = (
+    "ALTITUDE",
+    "CANOPY_HEIGHT",
+    "LATITUDE",
+    "LONGITUDE",
+    "ACQUISITION_FREQUENCY",
+    "FILE_DURATION",
+    "SA_HEIGHT",
+    "SA_WIND_DATA_FORMAT",
+    "SA_NORTH_ALIGNEMENT",
+    "SA_NORTH_OFFSET",
+    "GA_TUBE_LENGTH",
+    "GA_TUBE_DIAMETER",
+    "GA_FLOWRATE",
+    "GA_NORTHWARD_SEPARATION",
+    "GA_EASTWARD_SEPARATION",
+    "GA_VERTICAL_SEPARATION",
+)
+
+
+def select_ecmd_row_for_year(
+    ecmd_path: Path,
+    site_id: str,
+    year: int,
+) -> dict[str, str]:
+    """Select the ECMD row closest to but not later than a processing year.
+
+    Args:
+        ecmd_path: Path to ECMD CSV file
+        site_id: Site identifier to filter ECMD rows
+        year: Processing year to target (YYYY)
+
+    Returns:
+        Mapping of ECMD column name -> value (as strings)
+
+    Raises:
+        ECMDError: If ECMD file cannot be read, required columns are missing,
+            no matching rows exist, or dates are invalid
+    """
+    if not ecmd_path.exists():
+        raise ECMDError(f"ECMD file not found: {ecmd_path}")
+
+    required_columns = {"DATE_OF_VARIATION_EF", "SITEID", *ECMD_METADATA_COLUMNS}
+    target = datetime(year, 1, 1, 0, 0)
+
+    selected_row: dict[str, str] | None = None
+    selected_date: datetime | None = None
+    earliest_date: datetime | None = None
+
+    try:
+        with ecmd_path.open("r", newline="", encoding="utf-8") as csvfile:
+            reader = csv.DictReader(csvfile)
+
+            if not reader.fieldnames:
+                raise ECMDError(f"ECMD file has no header: {ecmd_path}")
+
+            missing_cols = sorted(required_columns - set(reader.fieldnames))
+            if missing_cols:
+                raise ECMDError(
+                    "ECMD file missing required columns: " + ", ".join(missing_cols)
+                )
+
+            for row in reader:
+                if row.get("SITEID", "").strip() != site_id:
+                    continue
+
+                date_str = row.get("DATE_OF_VARIATION_EF", "").strip()
+                if not date_str:
+                    raise ECMDError(
+                        "ECMD row missing DATE_OF_VARIATION_EF for site "
+                        f"'{site_id}' in {ecmd_path}"
+                    )
+
+                eff_date = parse_ecmd_date(date_str)
+
+                if earliest_date is None or eff_date < earliest_date:
+                    earliest_date = eff_date
+
+                if eff_date <= target and (
+                    selected_date is None or eff_date > selected_date
+                ):
+                    selected_date = eff_date
+                    selected_row = row
+
+    except csv.Error as e:
+        raise ECMDError(f"Error reading ECMD CSV {ecmd_path}: {e}") from e
+
+    if earliest_date is None:
+        raise ECMDError(f"No ECMD rows found for site '{site_id}' in {ecmd_path}")
+
+    if selected_row is None:
+        raise ECMDError(
+            "No ECMD row found at or before processing year start. "
+            f"Site '{site_id}', target={target.strftime('%Y-%m-%d %H:%M')}, "
+            f"earliest={earliest_date.strftime('%Y-%m-%d %H:%M')}"
+        )
+
+    selected: dict[str, str] = {}
+    for col in required_columns:
+        selected[col] = (selected_row.get(col, "") or "").strip()
+
+    return selected
+
+
 def generate_dynamic_metadata(
     ecmd_path: Path,
     output_path: Path,

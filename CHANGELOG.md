@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Static .metadata population from ECMD**
+  - Selects the ECMD row closest to but not later than the processing year
+  - Populates site, timing, and instrument fields plus station identifiers
+  - Validates missing ECMD values and fails with actionable errors
+
 - **High-frequency spectral correction method parameter (`--hf-meth`)**
   - New CLI parameter for controlling EddyPro's high-frequency spectral correction method
   - Valid values: 1 (Moncrieff et al. 1997 analytic) or 4 (Fratini et al. 2012 in situ/analytic, default in template)

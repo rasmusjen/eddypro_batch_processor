@@ -13,13 +13,19 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 
 from . import ecmd, ini_tools, report
 from .monitor import MonitoredOperation
 from .scenarios import Scenario
+
+
+def _raise_missing_ecmd(site_id: str, path: Path | None) -> NoReturn:
+    raise ecmd.ECMDError(  # noqa: TRY301 - centralized error helper
+        f"ECMD file not found for site {site_id}: {path}"
+    )
 
 
 class EddyProBatchProcessor:
@@ -525,6 +531,16 @@ def run_single_scenario(
         except Exception as meta_err:
             logging.warning(f"Failed to materialize metadata files: {meta_err}")
 
+        ecmd_path = ecmd_file
+        if ecmd_path is None or not ecmd_path.exists():
+            _raise_missing_ecmd(site_id, ecmd_path)
+
+        ecmd_row = ecmd.select_ecmd_row_for_year(
+            ecmd_path=ecmd_path,
+            site_id=site_id,
+            year=year,
+        )
+
         # Patch all path fields (normalized to forward slashes)
         ini_tools.patch_ini_paths(
             ini_config,
@@ -546,8 +562,15 @@ def run_single_scenario(
         # Conditionally patch date/time ranges based on rot_meth and tlag_meth
         ini_tools.patch_conditional_date_ranges(ini_config, year=year)
 
-        # Write final project file (no spaces around '=', LF endings)
-        ini_tools.write_ini_file(ini_config, scenario_project_file)
+        # Write final project file, then populate .metadata from ECMD
+        ini_tools.write_project_file_with_metadata(
+            ini_config,
+            scenario_project_file,
+            metadata_path=scenario_output_dir / metadata_filename,
+            site_id=site_id,
+            output_dir=scenario_output_dir,
+            ecmd_row=ecmd_row,
+        )
 
         # Preflight validation: ensure inputs and metadata are sane
         try:

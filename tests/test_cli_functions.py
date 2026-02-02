@@ -3,6 +3,7 @@
 # ruff: noqa: SIM117 - Nested with statements are readable in test context
 
 import argparse
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -18,12 +19,28 @@ from eddypro_batch_processor.cli import (
 )
 
 
+def _write_ecmd_file(tmp_path: Path, site_id: str) -> Path:
+    ecmd_path = tmp_path / "ecmd.csv"
+    content = (
+        "DATE_OF_VARIATION_EF,SITEID,ALTITUDE,CANOPY_HEIGHT,LATITUDE,LONGITUDE,"
+        "ACQUISITION_FREQUENCY,FILE_DURATION,SA_HEIGHT,SA_WIND_DATA_FORMAT,"
+        "SA_NORTH_ALIGNEMENT,SA_NORTH_OFFSET,GA_TUBE_LENGTH,GA_TUBE_DIAMETER,"
+        "GA_FLOWRATE,GA_NORTHWARD_SEPARATION,GA_EASTWARD_SEPARATION,"
+        "GA_VERTICAL_SEPARATION\n"
+        f"202001010000,{site_id},10,0.5,1.0,2.0,10,30,3.1,uvw,spar,"
+        "60,71.1,5.3,12,-11,-18,0\n"
+    )
+    ecmd_path.write_text(content, encoding="utf-8")
+    return ecmd_path
+
+
 class TestCLICommandFunctions:
     """Test the CLI command handler functions."""
 
     def test_cmd_run_basic(self, tmp_path):
         """Test the cmd_run function with basic arguments."""
         # Create a complete config file with all required fields
+        ecmd_file = _write_ecmd_file(tmp_path, "test-site")
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text(
             f"""
@@ -32,7 +49,7 @@ years_to_process: [2021]
 eddypro_executable: /fake/eddypro.exe
 input_dir_pattern: {tmp_path}/input/{{site_id}}/{{year}}
 output_dir_pattern: {tmp_path}/output/{{site_id}}/{{year}}
-ecmd_file: /fake/ecmd.csv
+ecmd_file: {ecmd_file}
 max_processes: 1
 multiprocessing: false
 stream_output: false
@@ -61,6 +78,7 @@ report_charts: none
 
     def test_cmd_run_with_site_override(self, tmp_path):
         """Test cmd_run with site override."""
+        ecmd_file = _write_ecmd_file(tmp_path, "TEST-SITE")
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text(
             f"""
@@ -69,7 +87,7 @@ years_to_process: [2021]
 eddypro_executable: /fake/eddypro.exe
 input_dir_pattern: {tmp_path}/input/{{site_id}}/{{year}}
 output_dir_pattern: {tmp_path}/output/{{site_id}}/{{year}}
-ecmd_file: /fake/ecmd.csv
+ecmd_file: {ecmd_file}
 max_processes: 1
 multiprocessing: false
 stream_output: false
@@ -97,6 +115,7 @@ report_charts: none
 
     def test_cmd_run_with_years_override(self, tmp_path):
         """Test cmd_run with years override."""
+        ecmd_file = _write_ecmd_file(tmp_path, "test-site")
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text(
             f"""
@@ -105,7 +124,7 @@ years_to_process: [2020]
 eddypro_executable: /fake/eddypro.exe
 input_dir_pattern: {tmp_path}/input/{{site_id}}/{{year}}
 output_dir_pattern: {tmp_path}/output/{{site_id}}/{{year}}
-ecmd_file: /fake/ecmd.csv
+ecmd_file: {ecmd_file}
 max_processes: 1
 multiprocessing: false
 stream_output: false
@@ -133,6 +152,7 @@ report_charts: none
 
     def test_cmd_run_with_dry_run(self, tmp_path):
         """Test cmd_run with dry run enabled."""
+        ecmd_file = _write_ecmd_file(tmp_path, "test-site")
         config_file = tmp_path / "test_config.yaml"
         config_file.write_text(
             f"""
@@ -141,7 +161,7 @@ years_to_process: [2021]
 eddypro_executable: /fake/eddypro.exe
 input_dir_pattern: {tmp_path}/input/{{site_id}}/{{year}}
 output_dir_pattern: {tmp_path}/output/{{site_id}}/{{year}}
-ecmd_file: /fake/ecmd.csv
+ecmd_file: {ecmd_file}
 max_processes: 1
 multiprocessing: false
 stream_output: false

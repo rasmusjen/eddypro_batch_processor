@@ -379,6 +379,164 @@ despike_meth=0
         with self.assertRaises(ini_tools.INIParameterError):
             ini_tools.validate_eddypro_metadata(config)
 
+    def test_populate_metadata_file_sets_expected_fields(self):
+        """Populate metadata from ECMD and verify key fields."""
+        repo_meta = Path("config") / "metadata_template.ini"
+        self.assertTrue(repo_meta.exists())
+
+        metadata_path = self.temp_dir / "SITE.metadata"
+        shutil.copyfile(repo_meta, metadata_path)
+
+        ecmd_row = {
+            "ALTITUDE": "38",
+            "CANOPY_HEIGHT": "0.1",
+            "LATITUDE": "74.48",
+            "LONGITUDE": "-20.55",
+            "ACQUISITION_FREQUENCY": "10",
+            "FILE_DURATION": "30",
+            "SA_HEIGHT": "3.16",
+            "SA_WIND_DATA_FORMAT": "uvw",
+            "SA_NORTH_ALIGNEMENT": "spar",
+            "SA_NORTH_OFFSET": "60",
+            "GA_TUBE_LENGTH": "71.1",
+            "GA_TUBE_DIAMETER": "5.3",
+            "GA_FLOWRATE": "12",
+            "GA_NORTHWARD_SEPARATION": "-11",
+            "GA_EASTWARD_SEPARATION": "-18",
+            "GA_VERTICAL_SEPARATION": "0",
+        }
+
+        output_dir = self.temp_dir / "out"
+        ini_tools.populate_metadata_file(
+            metadata_path,
+            site_id="SITE",
+            output_dir=output_dir,
+            ecmd_row=ecmd_row,
+        )
+
+        config = configparser.ConfigParser()
+        config.read(metadata_path, encoding="utf-8")
+
+        self.assertEqual(
+            config.get("Project", "file_name"),
+            (output_dir / "SITE.metadata").as_posix(),
+        )
+        self.assertEqual(config.get("Site", "site_id"), "SITE")
+        self.assertEqual(config.get("Station", "station_id"), "SITE")
+        self.assertEqual(config.get("Station", "station_name"), "SITE")
+        self.assertEqual(config.get("Site", "altitude"), "38")
+        self.assertEqual(config.get("Timing", "file_duration"), "30")
+        self.assertEqual(config.get("Instruments", "instr_1_height"), "3.16")
+
+    def test_populate_metadata_file_missing_ecmd_values_raises(self):
+        """Missing ECMD values should raise validation errors."""
+        repo_meta = Path("config") / "metadata_template.ini"
+        metadata_path = self.temp_dir / "SITE.metadata"
+        shutil.copyfile(repo_meta, metadata_path)
+
+        ecmd_row = {
+            "ALTITUDE": "",
+            "CANOPY_HEIGHT": "0.1",
+            "LATITUDE": "74.48",
+            "LONGITUDE": "-20.55",
+            "ACQUISITION_FREQUENCY": "10",
+            "FILE_DURATION": "30",
+            "SA_HEIGHT": "3.16",
+            "SA_WIND_DATA_FORMAT": "uvw",
+            "SA_NORTH_ALIGNEMENT": "spar",
+            "SA_NORTH_OFFSET": "60",
+            "GA_TUBE_LENGTH": "71.1",
+            "GA_TUBE_DIAMETER": "5.3",
+            "GA_FLOWRATE": "12",
+            "GA_NORTHWARD_SEPARATION": "-11",
+            "GA_EASTWARD_SEPARATION": "-18",
+            "GA_VERTICAL_SEPARATION": "0",
+        }
+
+        with self.assertRaises(ini_tools.INIParameterError):
+            ini_tools.populate_metadata_file(
+                metadata_path,
+                site_id="SITE",
+                output_dir=self.temp_dir,
+                ecmd_row=ecmd_row,
+            )
+
+    def test_populate_metadata_file_missing_section_raises(self):
+        """Missing required sections should raise an error."""
+        metadata_path = self.temp_dir / "SITE.metadata"
+        metadata_path.write_text("[Project]\nfile_name=\n", encoding="utf-8")
+
+        with self.assertRaises(ini_tools.INIParameterError):
+            ini_tools.populate_metadata_file(
+                metadata_path,
+                site_id="SITE",
+                output_dir=self.temp_dir,
+                ecmd_row={"ALTITUDE": "10"},
+            )
+
+    def test_write_metadata_file_writes_header(self):
+        """Metadata writer should include the GHG header and no trailing blanks."""
+        config = configparser.ConfigParser()
+        config.add_section("Project")
+        config.set("Project", "file_name", "SITE.metadata")
+
+        output_path = self.temp_dir / "out.metadata"
+        ini_tools.write_metadata_file(config, output_path)
+
+        text = output_path.read_text(encoding="utf-8")
+        assert text.startswith(";GHG_METADATA\n")
+        assert text.splitlines()[-1].strip()
+
+    def test_write_project_file_with_metadata(self):
+        """Project writer should populate metadata after writing .eddypro."""
+        project_config = configparser.ConfigParser()
+        project_config.add_section("Project")
+        project_config.set("Project", "file_name", "SITE.eddypro")
+
+        metadata_path = self.temp_dir / "SITE.metadata"
+        metadata_path.write_text(
+            "[Project]\nfile_name=\n"
+            "[Site]\nsite_id=\n"
+            "[Station]\nstation_id=\nstation_name=\n"
+            "[Timing]\nacquisition_frequency=\nfile_duration=\n"
+            "[Instruments]\ninstr_1_height=\n",
+            encoding="utf-8",
+        )
+
+        ecmd_row = {
+            "ALTITUDE": "38",
+            "CANOPY_HEIGHT": "0.1",
+            "LATITUDE": "74.48",
+            "LONGITUDE": "-20.55",
+            "ACQUISITION_FREQUENCY": "10",
+            "FILE_DURATION": "30",
+            "SA_HEIGHT": "3.16",
+            "SA_WIND_DATA_FORMAT": "uvw",
+            "SA_NORTH_ALIGNEMENT": "spar",
+            "SA_NORTH_OFFSET": "60",
+            "GA_TUBE_LENGTH": "71.1",
+            "GA_TUBE_DIAMETER": "5.3",
+            "GA_FLOWRATE": "12",
+            "GA_NORTHWARD_SEPARATION": "-11",
+            "GA_EASTWARD_SEPARATION": "-18",
+            "GA_VERTICAL_SEPARATION": "0",
+        }
+
+        project_path = self.temp_dir / "SITE.eddypro"
+        ini_tools.write_project_file_with_metadata(
+            project_config,
+            project_path,
+            metadata_path=metadata_path,
+            site_id="SITE",
+            output_dir=self.temp_dir,
+            ecmd_row=ecmd_row,
+        )
+
+        assert project_path.exists()
+        parser = configparser.ConfigParser()
+        parser.read(metadata_path, encoding="utf-8")
+        assert parser.get("Site", "site_id") == "SITE"
+
 
 class TestScenarioSuffixGeneration(unittest.TestCase):
     """Test scenario suffix generation functionality."""

@@ -6,6 +6,7 @@ that all components work together correctly: CLI → config → INI generation �
 scenario execution → reporting → manifest generation.
 """
 
+import configparser
 import json
 import subprocess
 import sys
@@ -36,13 +37,15 @@ class TestEndToEndIntegration:
         """Create a mock ECMD CSV file with required columns."""
         ecmd_file = tmp_path / "test_ecmd.csv"
         content = (
-            "DATE_OF_VARIATION_EF,FILE_DURATION,ACQUISITION_FREQUENCY,CANOPY_HEIGHT,"
-            "SA_MANUFACTURER,SA_MODEL,SA_HEIGHT,SA_WIND_DATA_FORMAT,SA_NORTH_ALIGNEMENT,"
-            "SA_NORTH_OFFSET,GA_MANUFACTURER,GA_MODEL,GA_NORTHWARD_SEPARATION,"
-            "GA_EASTWARD_SEPARATION,GA_VERTICAL_SEPARATION,GA_PATH,GA_TUBE_LENGTH,"
-            "GA_TUBE_DIAMETER,GA_FLOWRATE\n"
-            "2021-01-01,30,20,2.5,TestManufacturer,TestModel,3.0,u-v-w,0,0,"
-            "TestGA,TestGAModel,0.1,0.1,0.2,closed,1.5,0.01,10.0\n"
+            "DATE_OF_VARIATION_EF,SITEID,ALTITUDE,CANOPY_HEIGHT,LATITUDE,LONGITUDE,"
+            "ACQUISITION_FREQUENCY,FILE_DURATION,SA_MANUFACTURER,SA_MODEL,SA_HEIGHT,"
+            "SA_WIND_DATA_FORMAT,SA_NORTH_ALIGNEMENT,SA_NORTH_OFFSET,GA_MANUFACTURER,"
+            "GA_MODEL,GA_NORTHWARD_SEPARATION,GA_EASTWARD_SEPARATION,"
+            "GA_VERTICAL_SEPARATION,GA_PATH,GA_TUBE_LENGTH,GA_TUBE_DIAMETER,"
+            "GA_FLOWRATE\n"
+            "202101010000,TEST-SITE,10,2.5,1.0,2.0,20,30,TestManufacturer,"
+            "TestModel,3.0,uvw,spar,0,TestGA,TestGAModel,0.1,0.1,0.2,closed,"
+            "1.5,0.01,10.0\n"
         )
         ecmd_file.write_text(content)
         return ecmd_file
@@ -118,6 +121,11 @@ sa_full_spectra =
         config_dir.mkdir(exist_ok=True)
         template_target = config_dir / "EddyProProject_template.ini"
         template_target.write_text(template_ini.read_text())
+        metadata_template = Path("config") / "metadata_template.ini"
+        (config_dir / "metadata_template.ini").write_text(
+            metadata_template.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
 
         # Run the CLI in dry-run mode
         result = subprocess.run(
@@ -150,6 +158,14 @@ sa_full_spectra =
         manifest_file = reports_dir / "run_manifest.json"
         assert manifest_file.exists(), "Run manifest not created"
 
+        metadata_file = output_base / "TEST-SITE.metadata"
+        assert metadata_file.exists(), ".metadata file not created"
+
+        parser = configparser.ConfigParser()
+        parser.read(metadata_file, encoding="utf-8")
+        assert parser.get("Site", "site_id") == "TEST-SITE"
+        assert parser.get("Station", "station_id") == "TEST-SITE"
+
         # Load and validate manifest structure
         with open(manifest_file) as f:
             manifest = json.load(f)
@@ -175,6 +191,11 @@ sa_full_spectra =
         config_dir.mkdir(exist_ok=True)
         template_target = config_dir / "EddyProProject_template.ini"
         template_target.write_text(template_ini.read_text())
+        metadata_template = Path("config") / "metadata_template.ini"
+        (config_dir / "metadata_template.ini").write_text(
+            metadata_template.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
 
         # Run scenarios command with multiple parameter combinations
         result = subprocess.run(
@@ -245,6 +266,11 @@ sa_full_spectra =
         config_dir.mkdir(exist_ok=True)
         template_target = config_dir / "EddyProProject_template.ini"
         template_target.write_text(template_ini.read_text())
+        metadata_template = Path("config") / "metadata_template.ini"
+        (config_dir / "metadata_template.ini").write_text(
+            metadata_template.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
 
         # First validate
         validate_result = subprocess.run(
@@ -297,6 +323,11 @@ sa_full_spectra =
         config_dir.mkdir(exist_ok=True)
         template_target = config_dir / "EddyProProject_template.ini"
         template_target.write_text(template_ini.read_text())
+        metadata_template = Path("config") / "metadata_template.ini"
+        (config_dir / "metadata_template.ini").write_text(
+            metadata_template.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
 
         # Run with parameter overrides
         result = subprocess.run(
@@ -345,6 +376,11 @@ sa_full_spectra =
         config_dir.mkdir(exist_ok=True)
         template_target = config_dir / "EddyProProject_template.ini"
         template_target.write_text(template_ini.read_text())
+        metadata_template = Path("config") / "metadata_template.ini"
+        (config_dir / "metadata_template.ini").write_text(
+            metadata_template.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
 
         # Try to generate 2×2×2×2×2×2 = 64 scenarios (exceeds cap of 32)
         result = subprocess.run(
@@ -393,6 +429,11 @@ sa_full_spectra =
         config_dir.mkdir(exist_ok=True)
         template_target = config_dir / "EddyProProject_template.ini"
         template_target.write_text(template_ini.read_text())
+        metadata_template = Path("config") / "metadata_template.ini"
+        (config_dir / "metadata_template.ini").write_text(
+            metadata_template.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
 
         # Run with report generation
         result = subprocess.run(

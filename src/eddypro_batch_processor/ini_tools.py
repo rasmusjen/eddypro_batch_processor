@@ -227,6 +227,144 @@ def write_ini_file(config: configparser.ConfigParser, output_path: Path) -> None
         raise OSError(f"Failed to write INI file {output_path}: {e}") from e
 
 
+def write_metadata_file(config: configparser.ConfigParser, output_path: Path) -> None:
+    """Write EddyPro static metadata (.metadata) file.
+
+    Uses no spaces around delimiters and LF line endings to match
+    EddyPro native format. Writes the GHG metadata header.
+
+    Args:
+        config: ConfigParser object to write
+        output_path: Path where to write the metadata file
+
+    Raises:
+        OSError: If file cannot be written
+    """
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(";GHG_METADATA\n")
+
+            buffer = io.StringIO()
+            config.write(buffer, space_around_delimiters=False)
+            content = buffer.getvalue()
+
+            lines = content.splitlines()
+            while lines and not lines[-1].strip():
+                lines.pop()
+            if lines:
+                f.write("\n".join(lines) + "\n")
+
+        logger.debug(f"Wrote metadata file to {output_path}")
+    except OSError as e:
+        raise OSError(f"Failed to write metadata file {output_path}: {e}") from e
+
+
+def populate_metadata_file(
+    metadata_path: Path,
+    *,
+    site_id: str,
+    output_dir: Path,
+    ecmd_row: dict[str, str],
+) -> None:
+    """Populate static metadata file with ECMD-derived values.
+
+    Args:
+        metadata_path: Path to the .metadata file to update
+        site_id: Site identifier
+        output_dir: Scenario output directory (for file_name)
+        ecmd_row: Selected ECMD row mapping
+
+    Raises:
+        INIParameterError: If metadata file is missing, sections are absent,
+            or ECMD values are missing
+    """
+    if not metadata_path.exists():
+        raise INIParameterError(f"Metadata file not found: {metadata_path}")
+
+    config = configparser.ConfigParser()
+    try:
+        config.read(metadata_path, encoding="utf-8")
+    except configparser.Error as e:
+        raise INIParameterError(
+            f"Failed to parse metadata file {metadata_path}: {e}"
+        ) from e
+
+    required_sections = ["Project", "Site", "Station", "Timing", "Instruments"]
+    missing_sections = [s for s in required_sections if not config.has_section(s)]
+    if missing_sections:
+        raise INIParameterError(
+            "Metadata file missing required sections: " + ", ".join(missing_sections)
+        )
+
+    # Static fields
+    file_name = (output_dir / f"{site_id}.metadata").as_posix()
+    config.set("Project", "file_name", file_name)
+    config.set("Site", "site_id", site_id)
+    config.set("Station", "station_id", site_id)
+    config.set("Station", "station_name", site_id)
+
+    ecmd_map: dict[str, dict[str, str]] = {
+        "Site": {
+            "altitude": "ALTITUDE",
+            "canopy_height": "CANOPY_HEIGHT",
+            "latitude": "LATITUDE",
+            "longitude": "LONGITUDE",
+        },
+        "Timing": {
+            "acquisition_frequency": "ACQUISITION_FREQUENCY",
+            "file_duration": "FILE_DURATION",
+        },
+        "Instruments": {
+            "instr_1_height": "SA_HEIGHT",
+            "instr_1_wformat": "SA_WIND_DATA_FORMAT",
+            "instr_1_wref": "SA_NORTH_ALIGNEMENT",
+            "instr_1_north_offset": "SA_NORTH_OFFSET",
+            "instr_2_tube_length": "GA_TUBE_LENGTH",
+            "instr_2_tube_diameter": "GA_TUBE_DIAMETER",
+            "instr_2_tube_flowrate": "GA_FLOWRATE",
+            "instr_2_northward_separation": "GA_NORTHWARD_SEPARATION",
+            "instr_2_eastward_separation": "GA_EASTWARD_SEPARATION",
+            "instr_2_vertical_separation": "GA_VERTICAL_SEPARATION",
+        },
+    }
+
+    missing_values: list[str] = []
+    for section, mapping in ecmd_map.items():
+        for meta_key, ecmd_col in mapping.items():
+            value = (ecmd_row.get(ecmd_col, "") or "").strip()
+            if not value:
+                missing_values.append(ecmd_col)
+                continue
+            config.set(section, meta_key, value)
+
+    if missing_values:
+        unique = ", ".join(sorted(set(missing_values)))
+        raise INIParameterError(f"ECMD row is missing required values: {unique}")
+
+    write_metadata_file(config, metadata_path)
+
+
+def write_project_file_with_metadata(
+    config: configparser.ConfigParser,
+    project_path: Path,
+    *,
+    metadata_path: Path,
+    site_id: str,
+    output_dir: Path,
+    ecmd_row: dict[str, str],
+) -> None:
+    """Write .eddypro project file and populate .metadata afterwards."""
+    write_ini_file(config, project_path)
+    populate_metadata_file(
+        metadata_path,
+        site_id=site_id,
+        output_dir=output_dir,
+        ecmd_row=ecmd_row,
+    )
+
+
 def patch_ini_paths(
     config: configparser.ConfigParser,
     *,
@@ -266,7 +404,10 @@ def patch_ini_paths(
 
     # Normalize all paths to forward slashes (EddyPro standard)
     file_name_normalized = (Path(out_path) / f"{site_id}.eddypro").as_posix()
-    proj_file_normalized = Path(proj_file).as_posix()
+    proj_file_path = Path(proj_file)
+    if not proj_file_path.is_absolute():
+        proj_file_path = Path(out_path) / proj_file_path
+    proj_file_normalized = proj_file_path.as_posix()
     dyn_metadata_file_normalized = Path(dyn_metadata_file).as_posix()
     data_path_normalized = Path(data_path).as_posix()
     out_path_normalized = Path(out_path).as_posix()

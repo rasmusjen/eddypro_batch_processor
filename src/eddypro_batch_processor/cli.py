@@ -13,6 +13,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import NoReturn
 
 from . import core, ecmd, ini_tools, report, scenarios, validation
 
@@ -351,6 +352,9 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
     overall_success = True
     years_processed = []
 
+    def _raise_missing_ecmd(site: str, path: Path | None) -> NoReturn:
+        raise ecmd.ECMDError(f"ECMD file not found for site {site}: {path}")
+
     for year in years:
         logging.info(f"Processing year {year} for site {site_id}")
 
@@ -368,6 +372,12 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
             if ini_parameters:
                 validated_params = ini_tools.validate_parameters(ini_parameters)
                 ini_tools.patch_ini_parameters(ini_config, validated_params)
+
+            ecmd_file_pattern = config.get("ecmd_file", "")
+            if "{site_id}" in ecmd_file_pattern:
+                ecmd_file = Path(ecmd_file_pattern.format(site_id=site_id))
+            else:
+                ecmd_file = Path(ecmd_file_pattern)
 
             # Materialize metadata files early (idempotent)
             try:
@@ -387,12 +397,6 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
                     )
 
                 # Generate dynamic metadata from ECMD CSV (all years included)
-                ecmd_file_pattern = config.get("ecmd_file", "")
-                if "{site_id}" in ecmd_file_pattern:
-                    ecmd_file = Path(ecmd_file_pattern.format(site_id=site_id))
-                else:
-                    ecmd_file = Path(ecmd_file_pattern)
-
                 dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
                 if ecmd_file.exists():
                     ecmd.generate_dynamic_metadata(
@@ -408,6 +412,15 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
 
             except Exception as meta_err:
                 logging.warning(f"Failed to materialize metadata files: {meta_err}")
+
+            if not ecmd_file.exists():
+                _raise_missing_ecmd(site_id, ecmd_file)
+
+            ecmd_row = ecmd.select_ecmd_row_for_year(
+                ecmd_path=ecmd_file,
+                site_id=site_id,
+                year=year,
+            )
 
             # Patch path fields
             # Input path from configured pattern
@@ -430,7 +443,14 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
                 scenario_suffix="",
             )
 
-            ini_tools.write_ini_file(ini_config, project_file)
+            ini_tools.write_project_file_with_metadata(
+                ini_config,
+                project_file,
+                metadata_path=output_dir / f"{site_id}.metadata",
+                site_id=site_id,
+                output_dir=output_dir,
+                ecmd_row=ecmd_row,
+            )
 
             logging.info(f"Created project file: {project_file}")
 
