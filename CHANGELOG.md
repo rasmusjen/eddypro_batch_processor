@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Project file naming uses site ID only**
+  - `.eddypro` files are now named `{site_id}.eddypro` (no year or scenario suffix)
+  - The `Project.file_name` field is aligned to the same `{site_id}.eddypro` pattern
+
 - **BREAKING: Renamed CLI parameter from `--despike-vm` to `--despike-meth`**
   - Renamed for consistency with other parameter naming (rot_meth, tlag_meth, detrend_meth)
   - Python parameter name changed from `despike_vm` to `despike_meth` throughout codebase
@@ -38,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Date ranges are automatically set to January 1 - December 31 for the processing year
   - Ensures EddyPro has sufficient data for planar fit calculations and time-lag optimization
   - New function `patch_conditional_date_ranges` in `ini_tools.py` with comprehensive test coverage
+
+- **Known issues and TODO tracking document**
+  - Added [docs/KNOWN_ISSUES_AND_TODO.md](docs/KNOWN_ISSUES_AND_TODO.md)
+  - Documents current pipeline limitations and planned work
 
 - **Machine-readable output file tracking in run manifests**
   - Run manifests now include `output_files` field with absolute paths to all EddyPro output CSV files
@@ -52,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `sa_bin_spectra` and `sa_full_spectra` now point to
     `{output_dir}/eddypro_binned_cospectra` and `{output_dir}/eddypro_full_cospectra`
   - INI writer now trims trailing empty lines
+
+- **Documentation alignment**
+  - Updated README and core docs to match current CLI behavior, outputs, and schemas
 
 ### ⚠️ BREAKING CHANGES
 

@@ -63,9 +63,6 @@ cp config/config.yaml.example config/config.yaml
 ```
 
 **Key configuration items:**
-```
-
-**Key configuration items:**
 
 - Set `eddypro_executable` to your EddyPro installation path
 - Update `input_dir_pattern` and `output_dir_pattern` for your data structure
@@ -121,7 +118,7 @@ pip install plotly
 Error: Missing required columns in ECMD file
 ```
 
-**Solution:** See [CONFIG.md](docs/CONFIG.md) for ECMD format requirements. Ensure your CSV has required columns: `filename`, `date`, `time`, `DOY`, etc.
+**Solution:** See [CONFIG.md](docs/CONFIG.md) for ECMD format requirements. Ensure your CSV has required columns such as `DATE_OF_VARIATION_EF`, `SITEID`, and the sensor metadata fields.
 
 **Permission errors on Windows:**
 
@@ -195,7 +192,8 @@ source venv/bin/activate
    - `--despike-meth 0 1` → Spike removal: 0=Vickers & Mahrt (1997), 1=Mauder et al. (2013)
    - `--hf-meth 1 4` → High-frequency spectral correction: 1=Moncrieff et al. (1997) analytic, 4=Fratini et al. (2012) in situ/analytic
 
-   Each scenario runs independently and produces separate output files with unique names (e.g., `scenario_rot1_tlag2_det0_spk1`).
+   Each scenario runs independently and produces separate output files in
+   `scenario{suffix}` directories (e.g., `scenario_rot1_tlag2_det0_spk1`).
 
    See [SCENARIOS.md](docs/SCENARIOS.md) for detailed documentation on scenario runs.
 
@@ -220,9 +218,10 @@ For detailed information, see the `docs/` directory:
 - **[SCENARIOS.md](docs/SCENARIOS.md)** – Scenario matrix runs, parameter testing, and naming conventions
 - **[REPORTING.md](docs/REPORTING.md)** – Understanding reports, performance metrics, and manifest structure
 - **[OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md)** – Machine-readable output file tracking in manifests
+- **[KNOWN_ISSUES_AND_TODO.md](docs/KNOWN_ISSUES_AND_TODO.md)** – Known issues, gaps, and roadmap items
 - **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** – Contributing guidelines, development setup, and testing
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** – System design and module organization
-- **[IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)** – Project roadmap and completed milestones
+- **[plan/IMPROVEMENT_PLAN.md](docs/plan/IMPROVEMENT_PLAN.md)** – Project roadmap and completed milestones
 
 ## Key Capabilities
 
@@ -256,7 +255,8 @@ This creates 16 scenarios (2×2×2×2) with all combinations:
 - Detrending: Block Average (0) and Linear Detrending (1)
 - Spike removal: Vickers & Mahrt (0) and Mauder et al. (1)
 
-Each scenario is named uniquely (e.g., `scenario_rot1_tlag2_det0_spk1`) and processed independently. Results are tracked in the run manifest for comparison.
+Each scenario is named uniquely (e.g., `scenario_rot1_tlag2_det0_spk1`) and
+processed independently. Results are tracked in the run manifest for comparison.
 
 **Note:** Maximum 32 scenarios allowed (configurable via `--max-scenarios`). See [SCENARIOS.md](docs/SCENARIOS.md) for details.
 
@@ -283,7 +283,10 @@ Generates detailed reports after each run:
 - **Per-scenario metrics** (CSV time series of resource usage)
 - **Provenance capture** (config checksum, git SHA, Python environment, package versions)
 
-Reports are saved to `{output_dir}/reports/` by default. See [REPORTING.md](docs/REPORTING.md) and [OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md) for details.
+Reports are saved to `{output_dir}/reports/` by default. HTML reports are
+generated for `run` executions; `scenarios` currently writes a run manifest only.
+See [REPORTING.md](docs/REPORTING.md) and [OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md)
+for details.
 
 ## Configuration Example
 

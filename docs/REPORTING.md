@@ -7,7 +7,7 @@ This document describes the structure, location, and interpretation of reports g
 The batch processor generates comprehensive reports for each run, including:
 
 - Run manifests (machine-readable JSON)
-- HTML reports with interactive visualizations
+- HTML reports with interactive visualizations (for `run` executions)
 - Per-scenario metrics and metadata
 - Performance time series data
 
@@ -54,40 +54,46 @@ eddypro-batch run --reports-dir /custom/reports
 
 ```json
 {
-  "run_id": "20251002_100530",
-  "config_hash": "a1b2c3d4",
-  "git_sha": "1234567890abcdef",
+  "run_id": "GL-ZaF_20251002_100530",
+  "timestamp": "2025-10-02T10:05:30",
   "start_time": "2025-10-02T10:05:30",
   "end_time": "2025-10-02T11:20:15",
   "duration_seconds": 4485.2,
   "site_id": "GL-ZaF",
-  "years": [2021, 2022],
+  "years_processed": [2021, 2022],
+  "config_checksum": "a1b2c3d4",
+  "config_snapshot": {"...": "..."},
+  "overall_success": true,
   "scenarios": [
     {
-      "scenario_id": "rot1_tlag2",
-      "parameters": {"rot_meth": 1, "tlag_meth": 2},
-      "success": true,
-      "duration_seconds": 932.1,
-      "output_dir": "/path/to/_rot1_tlag2",
-      "metrics_summary": {
-        "cpu_percent_avg": 45.2,
-        "memory_rss_peak_mb": 1024.5
-      }
+      "scenario_name": "baseline",
+      "scenario_params": {},
+      "start_time": "2025-10-02T10:05:30",
+      "end_time": "2025-10-02T11:20:15",
+      "duration_seconds": 4485.2,
+      "success": true
     }
   ],
-  "summary": {
-    "total_scenarios": 4,
-    "successful": 4,
-    "failed": 0
+  "output_dirs": ["/path/to/output"],
+  "output_files": {
+    "/path/to/output": {
+      "fluxnet_files": [],
+      "full_output_files": [],
+      "metadata_files": [],
+      "qc_details_files": []
+    }
   },
   "environment": {
     "python_version": "3.12.6",
-    "eddypro_version": "7.0.9",
-    "packages": {
-      "psutil": "5.9.0",
-      "plotly": "5.14.0"
+    "platform": "Windows-10-10.0.22631-SP0",
+    "processor": "...",
+    "package_versions": {
+      "PyYAML": "6.0.2",
+      "psutil": "5.9.8",
+      "plotly": "5.22.0"
     }
-  }
+  },
+  "dry_run": false
 }
 ```
 
@@ -102,30 +108,19 @@ eddypro-batch run --reports-dir /custom/reports
 **Contents:**
 
 1. **Run Summary**
-   - Run ID, timestamps, duration
-   - Configuration snapshot
-   - Success/failure counts
+  - Run ID, timestamps, duration
+  - Site ID and years processed
+  - Overall success status
 
-2. **Scenario Matrix**
-   - Table of all scenarios with parameters
-   - Status indicators (✓/✗)
-   - Per-scenario timings
+2. **Scenario Results Table**
+  - Scenario name and parameters
+  - Duration and success status
 
-3. **Performance Charts**
-   - CPU usage over time (all scenarios)
-   - Memory usage over time
-   - Disk I/O throughput
-   - Scenario comparison bar charts
+3. **Performance Charts (Plotly only)**
+  - CPU, memory, and disk I/O time series per loaded metrics file
 
-4. **Metrics Table**
-   - Min/avg/max CPU, memory, I/O per scenario
-   - Duration comparison
-   - Sorting and filtering controls
-
-5. **Environment & Provenance**
-   - Software versions
-   - Config checksums
-   - Git commit SHA (if available)
+4. **Environment**
+  - Python, platform, and package versions
 
 **Chart Engine:**
 - Default: Plotly (interactive, zoomable, exportable)
@@ -138,80 +133,67 @@ eddypro-batch run --reports-dir /custom/reports
 
 Each scenario produces additional files in its output directory:
 
-#### manifest.json
+- `scenario_manifest{suffix}.json` – scenario metadata
+- `metrics{suffix}.csv` – performance time series (CPU, memory, I/O)
+- `metrics_summary{suffix}.json` – summary statistics from the monitor
 
-**Location:** `{output_dir}/{scenario_suffix}/manifest.json`
+#### scenario_manifest{suffix}.json
+
+**Location:** `{output_dir}/scenario{scenario_suffix}/scenario_manifest{scenario_suffix}.json`
 
 **Example:**
 ```
-D:/L1_processed/GL-ZaF/2021/ec_rflux/_rot1_tlag2/manifest.json
+D:/L1_processed/GL-ZaF/2021/ec_rflux/scenario_rot1_tlag2/scenario_manifest_rot1_tlag2.json
 ```
 
 **Schema:**
 
 ```json
 {
-  "scenario_id": "rot1_tlag2",
-  "parameters": {
+  "scenario_index": 1,
+  "scenario_suffix": "_rot1_tlag2",
+  "scenario_params": {
     "rot_meth": 1,
     "tlag_meth": 2
   },
-  "project_file": "/path/to/GL-ZaF_2021_rot1_tlag2.eddypro",
-  "output_dir": "/path/to/_rot1_tlag2",
-  "timestamps": {
-    "start": "2025-10-02T10:00:00",
-    "end": "2025-10-02T10:15:32"
-  },
+  "project_file": "/path/to/GL-ZaF.eddypro",
+  "output_dir": "/path/to/scenario_rot1_tlag2",
+  "start_time": "2025-10-02T10:00:00",
+  "end_time": "2025-10-02T10:15:32",
+  "duration_seconds": 932.1,
   "success": true,
-  "exit_code": 0,
-  "eddypro_log": "/path/to/eddypro_processing.log",
-  "metrics": {
-    "duration_seconds": 932.1,
-    "cpu_percent_min": 12.3,
-    "cpu_percent_avg": 45.2,
-    "cpu_percent_max": 89.4,
-    "memory_rss_peak_mb": 1024.5,
-    "memory_rss_avg_mb": 512.3,
-    "disk_read_mb": 512.3,
-    "disk_write_mb": 128.7,
-    "disk_read_iops": 1234,
-    "disk_write_iops": 456
-  },
-  "output_files": [
-    "eddypro_full_output_2021.csv",
-    "eddypro_metadata_2021.txt",
-    "eddypro_qc_details_2021.txt"
-  ]
+  "return_code": 0,
+  "dry_run": false
 }
 ```
 
-#### metrics.csv
+#### metrics{suffix}.csv
 
-**Location:** `{output_dir}/{scenario_suffix}/metrics.csv`
+**Location:** `{output_dir}/scenario{scenario_suffix}/metrics{suffix}.csv`
 
 **Purpose:** Performance time series sampled during EddyPro execution
 
 **Schema:**
 
 ```csv
-timestamp,elapsed_seconds,cpu_percent_process,cpu_percent_system,memory_rss_mb,memory_vms_mb,disk_read_mb,disk_write_mb,disk_read_iops,disk_write_iops
-2025-10-02T10:00:00,0.0,5.2,15.3,128.5,256.0,0.0,0.0,0,0
-2025-10-02T10:00:00.5,0.5,42.1,58.7,512.3,1024.0,10.5,2.3,120,45
-2025-10-02T10:00:01.0,1.0,55.8,72.1,768.9,1536.0,15.2,3.8,180,67
+timestamp,relative_time,system_cpu_percent,system_memory_total,system_memory_available,system_memory_percent,system_disk_read_bytes,system_disk_write_bytes,system_disk_read_count,system_disk_write_count,process_cpu_percent,process_memory_rss,process_memory_vms,process_memory_percent,process_io_read_bytes,process_io_write_bytes,process_io_read_count,process_io_write_count
+1738480800.0,0.0,5.2,34359738368,27892195328,18.8,0,0,0,0,1.2,12320768,45154304,0.1,0,0,0,0
+1738480800.5,0.5,42.1,34359738368,27179175936,20.9,1056768,262144,128,32,35.7,73400320,157286400,0.6,1048576,262144,16,4
+1738480801.0,1.0,55.8,34359738368,26843545600,21.9,1572864,524288,196,64,48.2,125829120,268435456,1.0,2097152,524288,32,8
 ...
 ```
 
 **Columns:**
-- `timestamp`: ISO 8601 timestamp
-- `elapsed_seconds`: time since scenario start
-- `cpu_percent_process`: CPU usage of EddyPro process
-- `cpu_percent_system`: system-wide CPU usage
-- `memory_rss_mb`: resident set size (physical memory)
-- `memory_vms_mb`: virtual memory size
-- `disk_read_mb`: cumulative disk read in MB
-- `disk_write_mb`: cumulative disk write in MB
-- `disk_read_iops`: disk read operations per second
-- `disk_write_iops`: disk write operations per second
+- `timestamp`: Unix epoch seconds
+- `relative_time`: seconds since monitoring started
+- `system_cpu_percent`: system-wide CPU usage
+- `system_memory_total`, `system_memory_available`, `system_memory_percent`
+- `system_disk_read_bytes`, `system_disk_write_bytes`, `system_disk_read_count`, `system_disk_write_count`
+- `process_cpu_percent`, `process_memory_rss`, `process_memory_vms`, `process_memory_percent`
+- `process_io_read_bytes`, `process_io_write_bytes`, `process_io_read_count`, `process_io_write_count`
+
+Column presence can vary by platform and psutil capabilities. The CSV is a raw
+time series; summary statistics are written to `metrics_summary{suffix}.json`.
 
 ---
 

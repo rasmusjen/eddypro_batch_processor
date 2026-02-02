@@ -117,16 +117,15 @@ Only parameters that vary across scenarios are included in the suffix.
 
 ### Project Files
 
-Each scenario generates a unique EddyPro project file:
+Each scenario generates an EddyPro project file named only with the site ID:
 
 ```
-{site_id}_{year}{suffix}.eddypro
+{site_id}.eddypro
 ```
 
 Example:
 ```
-GL-ZaF_2021_rot1_tlag2.eddypro
-GL-ZaF_2021_rot3_tlag4.eddypro
+GL-ZaF.eddypro
 ```
 
 ### Output Directories
@@ -134,22 +133,21 @@ GL-ZaF_2021_rot3_tlag4.eddypro
 Scenario outputs are written to subdirectories:
 
 ```
-{output_dir_pattern}/{site_id}/{year}/{suffix}/
+{output_dir_pattern}/{site_id}/{year}/scenario{suffix}/
 ```
 
 Example structure:
 ```
 data/processed/GL-ZaF/2021/
-├── _rot1_tlag2/
+├── scenario_rot1_tlag2/
 │   ├── eddypro_full_output_2021.csv
 │   └── ...
-├── _rot3_tlag2/
+├── scenario_rot3_tlag2/
 │   ├── eddypro_full_output_2021.csv
 │   └── ...
 └── reports/
     ├── run_manifest.json
-    ├── run_report.html
-    └── ...
+  └── ...
 ```
 
 ## Scenario Limits
@@ -191,11 +189,11 @@ Each scenario run produces:
 
 ### Per-Scenario Artifacts
 
-Located in `{output_dir}/{suffix}/`:
+Located in `{output_dir}/scenario{suffix}/`:
 
 - EddyPro output files (CSV, metadata, QC flags)
 - Processing logs
-- `manifest.json` – scenario metadata and metrics
+- `scenario_manifest{suffix}.json` – scenario metadata and metrics
 - `metrics.csv` – performance time series (CPU, memory, I/O)
 
 ### Aggregated Reports
@@ -203,39 +201,33 @@ Located in `{output_dir}/{suffix}/`:
 Located in `{output_dir}/reports/`:
 
 - `run_manifest.json` – Summary of all scenarios
-- `run_report.html` – Interactive report with charts
+- `run_report.html` – Interactive report with charts (currently generated for `run` executions)
 - Scenario comparison tables and visualizations
 
 See [REPORTING.md](REPORTING.md) for details on report structure and interpretation.
 
 ## Manifest Schema
 
-Each scenario's `manifest.json` contains:
+Each scenario's `scenario_manifest{suffix}.json` contains:
 
 ```json
 {
-  "scenario_id": "rot1_tlag2_det0_spk0",
-  "parameters": {
+  "scenario_index": 1,
+  "scenario_suffix": "_rot1_tlag2_det0_spk0",
+  "scenario_params": {
     "rot_meth": 1,
     "tlag_meth": 2,
     "detrend_meth": 0,
     "despike_meth": 0
   },
-  "project_file": "/path/to/GL-ZaF_2021_rot1_tlag2_det0_spk0.eddypro",
-  "output_dir": "/path/to/output/_rot1_tlag2_det0_spk0",
-  "timestamps": {
-    "start": "2025-10-02T10:00:00",
-    "end": "2025-10-02T10:15:32"
-  },
+  "project_file": "/path/to/GL-ZaF.eddypro",
+  "output_dir": "/path/to/output/scenario_rot1_tlag2_det0_spk0",
+  "start_time": "2025-10-02T10:00:00",
+  "end_time": "2025-10-02T10:15:32",
+  "duration_seconds": 932.1,
   "success": true,
-  "exit_code": 0,
-  "metrics": {
-    "duration_seconds": 932.1,
-    "cpu_percent_avg": 45.2,
-    "memory_rss_peak_mb": 1024.5,
-    "disk_read_mb": 512.3,
-    "disk_write_mb": 128.7
-  }
+  "return_code": 0,
+  "dry_run": false
 }
 ```
 

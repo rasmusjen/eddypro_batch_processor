@@ -43,6 +43,7 @@ src/eddypro_batch_processor/
 ├── __init__.py              # Package exports and version
 ├── cli.py                   # Command-line interface and entry points
 ├── core.py                  # Main business logic and orchestration
+├── ecmd.py                  # ECMD parsing and dynamic metadata generation
 ├── ini_tools.py             # EddyPro INI file manipulation
 ├── monitor.py               # Performance monitoring and metrics
 ├── report.py                # Report generation (HTML, JSON, manifest)
@@ -56,7 +57,8 @@ src/eddypro_batch_processor/
 |--------|----------------------|----------------------|
 | `cli.py` | Command-line interface | `main()`, `cmd_run()`, `cmd_scenarios()`, `cmd_validate()`, `cmd_status()` |
 | `core.py` | Business logic orchestration | `EddyProBatchProcessor`, `load_config()`, `validate_config()` |
-| `ini_tools.py` | EddyPro configuration management | `create_patched_ini()`, `validate_parameter()` |
+| `ecmd.py` | ECMD parsing & dynamic metadata | `select_ecmd_row_for_year()`, `generate_dynamic_metadata()` |
+| `ini_tools.py` | EddyPro configuration management | `patch_ini_paths()`, `patch_project_metadata()`, `patch_conditional_date_ranges()` |
 | `monitor.py` | Performance monitoring | `PerformanceMonitor`, `MonitoredOperation` |
 | `report.py` | Output generation | `generate_html_report()`, `generate_run_manifest()` |
 | `scenarios.py` | Scenario management | `generate_scenarios()`, `Scenario` dataclass |
@@ -108,15 +110,17 @@ graph TD
 4. **INI File Preparation** (`ini_tools.py`)
    - Load template INI files
    - Apply parameter patches
-   - Write scenario-specific configurations
+   - Patch paths and project metadata fields
+   - Populate static metadata from ECMD row
 
 5. **Processing Execution** (`core.py`)
-   - Launch EddyPro with monitoring
+   - `run`: executes configured EddyPro executable directly
+   - `scenarios`: copies EddyPro binaries and runs both `eddypro_rp` and `eddypro_fcc`
    - Capture performance metrics
    - Handle errors and timeouts
 
 6. **Report Generation** (`report.py`)
-   - Generate HTML reports with charts
+   - Generate HTML reports with charts (currently for `run` executions)
    - Create JSON manifests
    - Package performance data
 
