@@ -19,8 +19,10 @@ data/raw/
 data/processed/
 
 # Configuration files with secrets
-#config/*.ini
-config/config.yaml  # User-specific config (use config.yaml.example as template)
+config/*
+!config/config.yaml.example
+!config/EddyProProject_template.ini
+!config/metadata_template.ini
 
 # Test coverage reports
 .coverage

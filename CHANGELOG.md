@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Investigation doc on EddyPro execution path differences between `run` and `scenarios`.
+
 - **Static .metadata population from ECMD**
   - Selects the ECMD row closest to but not later than the processing year
   - Populates site, timing, and instrument fields plus station identifiers
