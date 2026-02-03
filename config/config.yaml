@@ -43,7 +43,7 @@ years_to_process:
 # Use `{year}` and `{site_id}` as placeholders
 #input_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/raw/{site_id}/{year}"
 
-input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv/test"
+input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
 
 # Output directory pattern for each year and site
 # Use `{year}` and `{site_id}` as placeholders

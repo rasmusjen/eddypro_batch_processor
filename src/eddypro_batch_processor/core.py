@@ -461,8 +461,8 @@ def run_single_scenario(
     scenario_output_dir = output_base_dir / f"scenario{scenario.suffix}"
     scenario_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Project filename must be {site_id}_{year}_{scenario_id}.eddypro
-    project_filename = f"{site_id}_{year}_{scenario.suffix.lstrip('_')}.eddypro"
+    # Project filename must be {site_id}.eddypro (no year or scenario suffix)
+    project_filename = f"{site_id}.eddypro"
     scenario_project_file = scenario_output_dir / project_filename
 
     # Metadata filenames (shared across years, not year-specific)

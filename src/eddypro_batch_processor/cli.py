@@ -366,7 +366,7 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate project file with parameter overrides and patched paths
-        project_file = output_dir / f"{site_id}_{year}.eddypro"
+        project_file = output_dir / f"{site_id}.eddypro"
         try:
             ini_config = ini_tools.read_ini_template(template_path)
             if ini_parameters:

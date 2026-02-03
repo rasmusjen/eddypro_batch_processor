@@ -679,4 +679,4 @@ pytest --log-cli-level=DEBUG
 
 - [USAGE.md](USAGE.md) – CLI usage
 - [CONFIG.md](CONFIG.md) – Configuration options
-- [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) – Project roadmap
+- [plan/IMPROVEMENT_PLAN.md](plan/IMPROVEMENT_PLAN.md) – Project roadmap
