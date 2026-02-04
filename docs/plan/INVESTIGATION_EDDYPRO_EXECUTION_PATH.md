@@ -102,50 +102,50 @@ None observed in this investigation.
 ## Draft debugging plan (no execution)
 
 ### Phase 1 — Confirm invocation path
-1. Verify the pipeline failure is triggered via `run` vs `scenarios`.
-2. Confirm `run` does not call `run_eddypro_with_monitoring()`.
-3. Confirm `eddypro_executable` points to `eddypro_rp.exe`.
+- [x] Verify the pipeline failure is triggered via `run` vs `scenarios`.
+- [x] Confirm `run` does not call `run_eddypro_with_monitoring()`.
+- [x] Confirm `eddypro_executable` points to `eddypro_rp.exe`.
 
 ### Phase 2 — Reconcile code paths
-1. Compare `cmd_run()` and `run_eddypro_with_monitoring()` for execution differences.
-2. Document the intended behavior: `run` must call `rp` then `fcc`, using the same local `bin/` copy and working directory strategy as `scenarios`.
-3. Define failure handling: if `rp` exits non-zero, skip `fcc` and report failure.
+- [x] Compare `cmd_run()` and `run_eddypro_with_monitoring()` for execution differences.
+- [x] Document the intended behavior: `run` must call `rp` then `fcc`, using the same local `bin/` copy and working directory strategy as `scenarios`.
+- [x] Define failure handling: if `rp` exits non-zero, skip `fcc` and report failure.
 
 ### Phase 3 — Correction options (design only)
-- **Option A (selected)**: Make `run` call `run_eddypro_with_monitoring()` (rp + fcc, bin copy).
+- [x] **Option A (selected)**: Make `run` call `run_eddypro_with_monitoring()` (rp + fcc, bin copy).
 
 ### Phase 4 — Acceptance criteria (implementation-ready)
 The change is complete when all criteria below pass:
 
-1. `run` executes both `eddypro_rp` then `eddypro_fcc` using the same local bin copy and working directory strategy as `scenarios`.
+- [x] `run` executes both `eddypro_rp` then `eddypro_fcc` using the same local bin copy and working directory strategy as `scenarios`.
 	 - Same bin copy location and temp directory strategy as in `run_eddypro_with_monitoring()`.
-2. If `eddypro_rp` exits non-zero, `eddypro_fcc` is **not** invoked, and the failure is surfaced in the run result/manifest.
-3. If `eddypro_rp` exits zero and `eddypro_fcc` exits zero, the run is marked successful.
-4. On success, `bin/` and `tmp/` are cleaned up (consistent with `scenarios` behavior).
-5. On failure, cleanup behavior is consistent with `scenarios` (do not introduce new retention behavior).
-6. Coverage remains ≥70% and all tests pass.
+- [x] If `eddypro_rp` exits non-zero, `eddypro_fcc` is **not** invoked, and the failure is surfaced in the run result/manifest.
+- [x] If `eddypro_rp` exits zero and `eddypro_fcc` exits zero, the run is marked successful.
+- [x] On success, `bin/` and `tmp/` are cleaned up (consistent with `scenarios` behavior).
+- [x] On failure, cleanup behavior is consistent with `scenarios` (do not introduce new retention behavior).
+- [ ] Coverage remains ≥70% and all tests pass.
 
 ### Phase 5 — Test plan (no execution)
 Target tests are limited and deterministic to protect coverage and speed. Use mocks for subprocess and filesystem.
 
 **Unit tests (core execution path):**
-- Add tests in [tests/test_core.py](../../tests/test_core.py) for `run_eddypro_with_monitoring()` or its call site in `cmd_run()`.
-- Mock subprocess to capture ordered calls:
+- [x] Add tests in [tests/test_core.py](../../tests/test_core.py) for `run_eddypro_with_monitoring()` or its call site in `cmd_run()`.
+- [x] Mock subprocess to capture ordered calls:
 	- Case A: `eddypro_rp` returns 0 → `eddypro_fcc` invoked exactly once after `eddypro_rp`.
 	- Case B: `eddypro_rp` returns non-zero → `eddypro_fcc` not invoked.
-- Assert working directory and executable path are sourced from the local `bin/` copy (same as `scenarios`).
+- [x] Assert working directory and executable path are sourced from the local `bin/` copy (same as `scenarios`).
 
 **CLI tests (command wiring):**
-- Update or add tests in [tests/test_cli_functions.py](../../tests/test_cli_functions.py) to ensure `cmd_run()` routes through `run_eddypro_with_monitoring()`.
-- Mock to verify call count and arguments without running external binaries.
+- [x] Update or add tests in [tests/test_cli_functions.py](../../tests/test_cli_functions.py) to ensure `cmd_run()` routes through `run_eddypro_with_monitoring()`.
+- [x] Mock to verify call count and arguments without running external binaries.
 
 **Integration tests (dry-run if possible):**
-- Update or add a minimal integration test in [tests/test_e2e_integration.py](../../tests/test_e2e_integration.py) using mocks to confirm rp→fcc ordering under `run`.
-- Use temporary directories and fixed paths; avoid wall-clock coupling.
+- [x] Update or add a minimal integration test in [tests/test_e2e_integration.py](../../tests/test_e2e_integration.py) using mocks to confirm rp→fcc ordering under `run`.
+- [x] Use temporary directories and fixed paths; avoid wall-clock coupling.
 
 **Coverage safeguard:**
-- Keep new tests minimal and focused; reuse fixtures where possible to avoid coverage regression.
+- [x] Keep new tests minimal and focused; reuse fixtures where possible to avoid coverage regression.
 
 ### Phase 6 — Documentation and changelog updates
-- Update [CHANGELOG.md](../../CHANGELOG.md) under Unreleased → Changed: `run` now mirrors `scenarios` execution path and includes `eddypro_fcc`.
-- Update [docs/USAGE.md](../../docs/USAGE.md) and [README.md](../../README.md) if behavior is user-visible (run now runs both executables).
+- [x] Update [CHANGELOG.md](../../CHANGELOG.md) under Unreleased → Changed: `run` now mirrors `scenarios` execution path and includes `eddypro_fcc`.
+- [x] Update [docs/USAGE.md](../../docs/USAGE.md) and [README.md](../../README.md) if behavior is user-visible (run now runs both executables).
