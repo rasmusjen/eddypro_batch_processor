@@ -471,20 +471,15 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
 
         # Execute EddyPro (or skip in dry-run mode)
         if not dry_run:
-            # Ensure we pass the project file to EddyPro executable
-            # Use the same OS flag as core runner (-s win/linux) for consistency
-            os_suffix = "win" if sys.platform.startswith("win") else "linux"
-            command = f'"{eddypro_exe}" -s {os_suffix} "{project_file}"'
-            exit_code = core.run_subprocess_with_monitoring(
-                command=command,
-                working_dir=output_dir,
+            success = core.run_eddypro_with_monitoring(
+                project_file=project_file,
+                eddypro_executable=eddypro_exe,
                 stream_output=stream_output,
                 metrics_interval=metrics_interval,
-                output_dir=output_dir,
                 scenario_suffix="",
             )
 
-            if exit_code != 0:
+            if not success:
                 logging.error(f"EddyPro processing failed for year {year}")
                 overall_success = False
             else:

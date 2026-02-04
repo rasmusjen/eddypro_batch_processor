@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `.eddypro` files are now named `{site_id}.eddypro` (no year or scenario suffix)
   - The `Project.file_name` field is aligned to the same `{site_id}.eddypro` pattern
 
+- **Run execution now mirrors scenarios (rp → fcc via local bin copy)**
+  - `run` uses the same local `bin/` copy and working-directory strategy as `scenarios`
+  - `eddypro_fcc` runs only after `eddypro_rp` succeeds
+
 - **BREAKING: Renamed CLI parameter from `--despike-vm` to `--despike-meth`**
   - Renamed for consistency with other parameter naming (rot_meth, tlag_meth, detrend_meth)
   - Python parameter name changed from `despike_vm` to `despike_meth` throughout codebase

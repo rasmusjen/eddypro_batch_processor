@@ -187,6 +187,55 @@ report_charts: none
         result = cmd_run(args)
         assert result == 0
 
+    def test_cmd_run_executes_via_core_runner(self, tmp_path: Path):
+        """Test cmd_run uses core.run_eddypro_with_monitoring when not dry-run."""
+        site_id = "test-site"
+        year = 2021
+        input_dir = tmp_path / "input" / site_id / str(year)
+        input_dir.mkdir(parents=True)
+        (input_dir / "sample.csv").write_text("data", encoding="utf-8")
+
+        ecmd_file = _write_ecmd_file(tmp_path, site_id)
+        config_file = tmp_path / "test_config.yaml"
+        config_file.write_text(
+            f"""
+site_id: {site_id}
+years_to_process: [{year}]
+eddypro_executable: /fake/eddypro.exe
+input_dir_pattern: {tmp_path}/input/{{site_id}}/{{year}}
+output_dir_pattern: {tmp_path}/output/{{site_id}}/{{year}}
+ecmd_file: {ecmd_file}
+max_processes: 1
+multiprocessing: false
+stream_output: false
+log_level: INFO
+metrics_interval_seconds: 0.5
+reports_dir: null
+report_charts: none
+"""
+        )
+
+        args = argparse.Namespace(
+            config=str(config_file),
+            site=None,
+            years=None,
+            dry_run=False,
+            rot_meth=None,
+            tlag_meth=None,
+            detrend_meth=None,
+            despike_meth=None,
+            hf_meth=None,
+        )
+
+        with patch(
+            "eddypro_batch_processor.cli.core.run_eddypro_with_monitoring",
+            return_value=True,
+        ) as mock_run:
+            result = cmd_run(args)
+
+        assert result == 0
+        mock_run.assert_called_once()
+
     def test_cmd_scenarios_basic(self):
         """Test the cmd_scenarios function with basic arguments."""
         args = argparse.Namespace(

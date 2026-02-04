@@ -164,6 +164,10 @@ source venv/bin/activate
    eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 2022
    ```
 
+   **Note:** `run` executes `eddypro_rp` followed by `eddypro_fcc` using the same
+   local `bin/` copy strategy as `scenarios`. If `eddypro_rp` fails, `eddypro_fcc`
+   is skipped.
+
 3. **Run a single scenario with specific parameters:**
 
    ```bash

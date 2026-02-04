@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -9,6 +10,7 @@ import yaml
 from eddypro_batch_processor.core import (
     EddyProBatchProcessor,
     load_config,
+    run_eddypro_with_monitoring,
     validate_config,
 )
 
@@ -204,6 +206,108 @@ class TestLegacyFunctions:
 
         # Should not raise an exception
         validate_config(valid_config)
+
+
+class TestRunEddyProWithMonitoring:
+    """Tests for the rp/fcc execution flow."""
+
+    def test_runs_rp_then_fcc_on_success(self, tmp_path: Path):
+        """Ensure eddypro_rp and eddypro_fcc run in order on success."""
+        project_dir = tmp_path / "site" / "2021"
+        project_dir.mkdir(parents=True)
+        project_file = project_dir / "TEST.eddypro"
+        project_file.write_text("project", encoding="utf-8")
+
+        eddypro_bin = tmp_path / "eddypro_bin"
+        eddypro_bin.mkdir()
+        eddypro_exe = eddypro_bin / "eddypro_rp.exe"
+        eddypro_exe.write_text("", encoding="utf-8")
+
+        def _mock_copytree(src: Path, dst: Path, dirs_exist_ok: bool = True) -> Path:
+            dst_path = Path(dst)
+            dst_path.mkdir(parents=True, exist_ok=True)
+            (dst_path / "eddypro_rp.exe").write_text("", encoding="utf-8")
+            (dst_path / "eddypro_fcc.exe").write_text("", encoding="utf-8")
+            return dst_path
+
+        with (
+            patch(
+                "eddypro_batch_processor.core.platform.system",
+                return_value="Windows",
+            ),
+            patch(
+                "eddypro_batch_processor.core.shutil.copytree",
+                side_effect=_mock_copytree,
+            ),
+            patch(
+                "eddypro_batch_processor.core.run_subprocess_with_monitoring",
+                side_effect=[0, 0],
+            ) as mock_run,
+        ):
+            success = run_eddypro_with_monitoring(
+                project_file=project_file,
+                eddypro_executable=eddypro_exe,
+                stream_output=False,
+                metrics_interval=0.5,
+                scenario_suffix="",
+            )
+
+        assert success is True
+        assert mock_run.call_count == 2
+
+        rp_call = mock_run.call_args_list[0].kwargs
+        fcc_call = mock_run.call_args_list[1].kwargs
+
+        assert "eddypro_rp.exe" in rp_call["command"]
+        assert "eddypro_fcc.exe" in fcc_call["command"]
+        assert rp_call["working_dir"] == project_dir.parent
+        assert fcc_call["working_dir"] == project_dir.parent
+        assert rp_call["scenario_suffix"] == "rp"
+        assert fcc_call["scenario_suffix"] == "fcc"
+
+    def test_skips_fcc_when_rp_fails(self, tmp_path: Path):
+        """Ensure eddypro_fcc is skipped when eddypro_rp fails."""
+        project_dir = tmp_path / "site" / "2021"
+        project_dir.mkdir(parents=True)
+        project_file = project_dir / "TEST.eddypro"
+        project_file.write_text("project", encoding="utf-8")
+
+        eddypro_bin = tmp_path / "eddypro_bin"
+        eddypro_bin.mkdir()
+        eddypro_exe = eddypro_bin / "eddypro_rp.exe"
+        eddypro_exe.write_text("", encoding="utf-8")
+
+        def _mock_copytree(src: Path, dst: Path, dirs_exist_ok: bool = True) -> Path:
+            dst_path = Path(dst)
+            dst_path.mkdir(parents=True, exist_ok=True)
+            (dst_path / "eddypro_rp.exe").write_text("", encoding="utf-8")
+            (dst_path / "eddypro_fcc.exe").write_text("", encoding="utf-8")
+            return dst_path
+
+        with (
+            patch(
+                "eddypro_batch_processor.core.platform.system",
+                return_value="Windows",
+            ),
+            patch(
+                "eddypro_batch_processor.core.shutil.copytree",
+                side_effect=_mock_copytree,
+            ),
+            patch(
+                "eddypro_batch_processor.core.run_subprocess_with_monitoring",
+                side_effect=[1],
+            ) as mock_run,
+        ):
+            success = run_eddypro_with_monitoring(
+                project_file=project_file,
+                eddypro_executable=eddypro_exe,
+                stream_output=False,
+                metrics_interval=0.5,
+                scenario_suffix="",
+            )
+
+        assert success is False
+        assert mock_run.call_count == 1
 
 
 if __name__ == "__main__":

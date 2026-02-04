@@ -278,19 +278,20 @@ def run_eddypro_with_monitoring(
         logging.error(f"eddypro_rp failed with return code {rp_return_code}")
         success = False
 
-    # Run eddypro_fcc with monitoring
-    logging.info("Starting eddypro_fcc with performance monitoring...")
-    fcc_return_code = run_subprocess_with_monitoring(
-        command=fcc_command,
-        working_dir=eddypro_path,
-        stream_output=stream_output,
-        metrics_interval=metrics_interval,
-        output_dir=output_dir,
-        scenario_suffix=f"{scenario_suffix}_fcc" if scenario_suffix else "fcc",
-    )
-    if fcc_return_code != 0:
-        logging.error(f"eddypro_fcc failed with return code {fcc_return_code}")
-        success = False
+    if success:
+        # Run eddypro_fcc with monitoring
+        logging.info("Starting eddypro_fcc with performance monitoring...")
+        fcc_return_code = run_subprocess_with_monitoring(
+            command=fcc_command,
+            working_dir=eddypro_path,
+            stream_output=stream_output,
+            metrics_interval=metrics_interval,
+            output_dir=output_dir,
+            scenario_suffix=f"{scenario_suffix}_fcc" if scenario_suffix else "fcc",
+        )
+        if fcc_return_code != 0:
+            logging.error(f"eddypro_fcc failed with return code {fcc_return_code}")
+            success = False
 
     # Clean up temporary directories
     try:

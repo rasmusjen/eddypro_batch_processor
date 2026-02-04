@@ -35,6 +35,10 @@ These options can be used with any command:
 
 Process site/years according to configuration and/or overrides.
 
+**Execution behavior:** The `run` command executes `eddypro_rp` followed by
+`eddypro_fcc` using a local `bin/` copy strategy (same as `scenarios`). If
+`eddypro_rp` fails, `eddypro_fcc` is skipped and the run is marked failed.
+
 **Usage:**
 ```bash
 eddypro-batch run [OPTIONS]
