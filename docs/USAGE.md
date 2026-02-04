@@ -29,6 +29,9 @@ These options can be used with any command:
 - `--log-level LEVEL`: Set the logging level (choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`; default: `INFO`)
 - `--help`, `-h`: Show help message and exit
 
+**Logging to file:** Configure `log_file` in your config to write logs to a file
+in addition to the terminal. See [CONFIG.md](CONFIG.md) for details.
+
 ## Commands
 
 ### run Command

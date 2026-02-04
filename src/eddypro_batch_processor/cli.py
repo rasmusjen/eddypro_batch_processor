@@ -18,13 +18,21 @@ from typing import NoReturn
 from . import core, ecmd, ini_tools, report, scenarios, validation
 
 
-def setup_logging(log_level: str = "INFO") -> None:
-    """Set up console logging with the specified level."""
+def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
+    """Set up console and optional file logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=handlers,
+        force=True,
     )
 
 
@@ -265,6 +273,8 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         processor.validate_config(config)
     except SystemExit:
         return 1
+
+    setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
 
     # Collect INI parameter overrides
     ini_parameters = {}
@@ -582,6 +592,8 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
     except SystemExit:
         return 1
 
+    setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
+
     # Apply CLI overrides
     site_id = args.site if args.site else config.get("site_id")
     years = args.years if args.years else config.get("years_to_process", [])
@@ -764,6 +776,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
         # SystemExit already logged by load_config
         return 1
 
+    setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
+
     # Run all validations
     results = validation.validate_all(
         config=config, skip_paths=args.skip_paths, skip_ecmd=args.skip_ecmd
@@ -809,6 +823,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         try:
             processor = core.EddyProBatchProcessor(config_path)
             config = processor.load_config()
+            setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
             reports_dir_config = config.get("reports_dir")
             if reports_dir_config:
                 reports_dir = Path(reports_dir_config)

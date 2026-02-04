@@ -68,6 +68,7 @@ cp config/config.yaml.example config/config.yaml
 - Update `input_dir_pattern` and `output_dir_pattern` for your data structure
 - Specify `ecmd_file` path for your site metadata
 - Ensure your ECMD metadata file is accessible
+- Optional: set `log_file` to write logs to a file (see CONFIG.md)
 
 #### 4. Verify Installation
 

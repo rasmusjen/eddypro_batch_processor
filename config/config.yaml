@@ -43,13 +43,13 @@ years_to_process:
 # Use `{year}` and `{site_id}` as placeholders
 #input_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/raw/{site_id}/{year}"
 
-input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
+input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv/test"
 
 # Output directory pattern for each year and site
 # Use `{year}` and `{site_id}` as placeholders
 #output_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/processed/{site_id}/{year}"
 
-output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux"
+output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux/test"
 
 # Path to the ECMD CSV file
 #ecmd_file: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/GL-ZaF_ecmd.csv"
@@ -66,6 +66,9 @@ stream_output: True  # Set to False to keep EddyPro output quiet
 
 # Control logging verbosity
 log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Optional log file path (null disables file logging)
+log_file: logs/eddypro_processing.log
 
 # Performance monitoring configuration
 metrics_interval_seconds: 0.5  # Sampling interval for performance monitoring

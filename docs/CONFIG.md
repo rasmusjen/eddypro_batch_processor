@@ -44,6 +44,9 @@ stream_output: True
 # Logging level
 log_level: INFO
 
+# Optional log file path (null disables file logging)
+log_file: "logs/eddypro_processing.log"
+
 # Performance monitoring
 metrics_interval_seconds: 0.5
 
@@ -69,6 +72,7 @@ The following keys **must** be present in your configuration file:
 | `ecmd_file` | str | Path to ECMD CSV file |
 | `stream_output` | bool | Enable/disable real-time output |
 | `log_level` | str | Logging level |
+| `log_file` | str or null | Optional log file path (null disables file logging) |
 | `multiprocessing` | bool | Enable/disable multiprocessing |
 | `max_processes` | int | Maximum number of processes |
 | `metrics_interval_seconds` | float | Performance monitoring interval |
@@ -320,6 +324,24 @@ log_level: INFO
 ```bash
 eddypro-batch --log-level DEBUG run
 ```
+
+---
+
+### log_file
+
+**Type:** String (path) or null
+
+**Description:** Optional log file path. When set, logs are written to both the
+terminal and this file. When null, only console logging is used.
+
+**Example:**
+```yaml
+log_file: "logs/eddypro_processing.log"
+```
+
+**Notes:**
+- The parent directory is created automatically if missing.
+- Useful for long runs where terminal output is truncated.
 
 ---
 

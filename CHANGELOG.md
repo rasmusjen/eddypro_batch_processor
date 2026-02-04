@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - When `rot_meth=3` (Planar Fit): sets `pf_start_date`, `pf_end_date`, `pf_start_time`, `pf_end_time` to full-year ranges
   - When `tlag_meth=4` (Covariance maximization with time-lag optimization): sets `to_start_date`, `to_end_date`, `to_start_time`, `to_end_time` to full-year ranges
 
+- **Configurable file logging**
+  - New `log_file` config key to write logs to a file in addition to the terminal
+  - Parent directory is created automatically when logging to a file
+
 ### Changed
 
 - **Project file naming uses site ID only**
