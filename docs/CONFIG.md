@@ -79,10 +79,6 @@ The following keys **must** be present in your configuration file:
 | `ecmd_file` | str | Path to ECMD CSV file |
 | `stream_output` | bool | Enable/disable real-time output |
 | `log_level` | str | Logging level |
-| `log_file` | str or null | Optional log file path (null disables file logging) |
-| `log_max_bytes` | int or null | Max log file size in bytes before rotation (0 disables rotation) |
-| `log_backup_count` | int or null | Number of rotated log files to keep |
-| `log_eddypro_output` | bool | Write EddyPro stdout/stderr to logs |
 | `multiprocessing` | bool | Enable/disable multiprocessing |
 | `max_processes` | int | Maximum number of processes |
 | `metrics_interval_seconds` | float | Performance monitoring interval |
@@ -94,6 +90,10 @@ The following keys **must** be present in your configuration file:
 | Key | Type | Description |
 |-----|------|-------------|
 | `project_template` | str or null | Optional path to EddyPro project template |
+| `log_file` | str or null | Optional log file path (null disables file logging) |
+| `log_max_bytes` | int or null | Max log file size in bytes before rotation (0 disables rotation) |
+| `log_backup_count` | int or null | Number of rotated log files to keep |
+| `log_eddypro_output` | bool | Write EddyPro stdout/stderr to logs |
 
 ## Configuration Details
 

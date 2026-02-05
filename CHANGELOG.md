@@ -76,6 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation alignment**
   - Updated README and core docs to match current CLI behavior, outputs, and schemas
 
+- **Logging config docs clarified**
+  - Marked `log_file`, `log_max_bytes`, `log_backup_count`, and `log_eddypro_output` as optional
+  - Added logging defaults to the example config
+
 ### ⚠️ BREAKING CHANGES
 
 - **Minimum Python version increased to 3.10**
