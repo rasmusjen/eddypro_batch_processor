@@ -143,6 +143,7 @@ def run_subprocess_with_monitoring(
     metrics_interval: float = 0.5,
     output_dir: Path | None = None,
     scenario_suffix: str = "",
+    log_output: bool = True,
 ) -> int:
     """
     Execute a subprocess command with performance monitoring.
@@ -162,6 +163,7 @@ def run_subprocess_with_monitoring(
         Subprocess return code, or -1 if an exception occurs
     """
     metrics_output_dir = output_dir or working_dir
+    output_logger = logging.getLogger("eddypro_batch_processor.eddypro")
 
     try:
         with MonitoredOperation(
@@ -189,9 +191,14 @@ def run_subprocess_with_monitoring(
             if stream_output and process.stdout:
                 for line in process.stdout:
                     print(line, end="")
-            else:
-                # Just wait for completion without streaming
+                    if log_output:
+                        output_logger.info(line.rstrip("\n"))
                 process.wait()
+            else:
+                stdout_data, _ = process.communicate()
+                if log_output and stdout_data:
+                    for line in stdout_data.splitlines():
+                        output_logger.info(line)
 
             return_code = process.returncode
             logging.debug(f"Subprocess finished with return code {return_code}")
@@ -208,6 +215,7 @@ def run_eddypro_with_monitoring(
     stream_output: bool = True,
     metrics_interval: float = 0.5,
     scenario_suffix: str = "",
+    log_output: bool = True,
 ) -> bool:
     """
     Run EddyPro processing with performance monitoring.
@@ -273,6 +281,7 @@ def run_eddypro_with_monitoring(
         metrics_interval=metrics_interval,
         output_dir=output_dir,
         scenario_suffix=f"{scenario_suffix}_rp" if scenario_suffix else "rp",
+        log_output=log_output,
     )
     if rp_return_code != 0:
         logging.error(f"eddypro_rp failed with return code {rp_return_code}")
@@ -288,6 +297,7 @@ def run_eddypro_with_monitoring(
             metrics_interval=metrics_interval,
             output_dir=output_dir,
             scenario_suffix=f"{scenario_suffix}_fcc" if scenario_suffix else "fcc",
+            log_output=log_output,
         )
         if fcc_return_code != 0:
             logging.error(f"eddypro_fcc failed with return code {fcc_return_code}")
@@ -434,6 +444,7 @@ def run_single_scenario(
     eddypro_executable: Path,
     stream_output: bool,
     metrics_interval: float,
+    log_output: bool,
     *,
     site_id: str,
     year: int,
@@ -592,6 +603,7 @@ def run_single_scenario(
                 stream_output=stream_output,
                 metrics_interval=metrics_interval,
                 scenario_suffix=scenario.suffix,
+                log_output=log_output,
             )
             return_code = 0 if success else 1
         else:
@@ -660,6 +672,7 @@ def run_scenario_batch(
     eddypro_executable: Path,
     stream_output: bool,
     metrics_interval: float,
+    log_output: bool,
     *,
     site_id: str,
     year: int,
@@ -693,6 +706,7 @@ def run_scenario_batch(
             eddypro_executable=eddypro_executable,
             stream_output=stream_output,
             metrics_interval=metrics_interval,
+            log_output=log_output,
             site_id=site_id,
             year=year,
             input_dir=input_dir,

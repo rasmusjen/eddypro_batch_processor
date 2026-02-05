@@ -47,6 +47,13 @@ log_level: INFO
 # Optional log file path (null disables file logging)
 log_file: "logs/eddypro_processing.log"
 
+# Log rotation (bytes) and backup count (0 disables rotation)
+log_max_bytes: 10485760
+log_backup_count: 5
+
+# Capture EddyPro stdout/stderr in logs
+log_eddypro_output: true
+
 # Performance monitoring
 metrics_interval_seconds: 0.5
 
@@ -73,6 +80,9 @@ The following keys **must** be present in your configuration file:
 | `stream_output` | bool | Enable/disable real-time output |
 | `log_level` | str | Logging level |
 | `log_file` | str or null | Optional log file path (null disables file logging) |
+| `log_max_bytes` | int or null | Max log file size in bytes before rotation (0 disables rotation) |
+| `log_backup_count` | int or null | Number of rotated log files to keep |
+| `log_eddypro_output` | bool | Write EddyPro stdout/stderr to logs |
 | `multiprocessing` | bool | Enable/disable multiprocessing |
 | `max_processes` | int | Maximum number of processes |
 | `metrics_interval_seconds` | float | Performance monitoring interval |
@@ -342,6 +352,49 @@ log_file: "logs/eddypro_processing.log"
 **Notes:**
 - The parent directory is created automatically if missing.
 - Useful for long runs where terminal output is truncated.
+
+---
+
+### log_max_bytes
+
+**Type:** Integer (bytes) or null
+
+**Description:** Maximum size of the log file before rotation. Set to 0 or null
+to disable rotation.
+
+**Example:**
+```yaml
+log_max_bytes: 10485760  # 10 MB
+```
+
+---
+
+### log_backup_count
+
+**Type:** Integer or null
+
+**Description:** Number of rotated log files to keep. Rotation uses numbered
+suffixes like `eddypro_processing.log.1` up to `.N`. Set to 0 or null to
+disable rotation.
+
+**Example:**
+```yaml
+log_backup_count: 5
+```
+
+---
+
+### log_eddypro_output
+
+**Type:** Boolean
+
+**Description:** When true, EddyPro stdout/stderr lines are written to the log
+handlers (console and file). If false, only pipeline logs are written.
+
+**Example:**
+```yaml
+log_eddypro_output: true
+```
 
 ---
 

@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Configurable file logging**
   - New `log_file` config key to write logs to a file in addition to the terminal
   - Parent directory is created automatically when logging to a file
+  - Rotating log files via `log_max_bytes` and `log_backup_count`
+  - EddyPro stdout/stderr can be included via `log_eddypro_output`
 
 ### Changed
 

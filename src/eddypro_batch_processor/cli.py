@@ -12,13 +12,19 @@ import logging
 import shutil
 import sys
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import NoReturn
 
 from . import core, ecmd, ini_tools, report, scenarios, validation
 
 
-def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
+def setup_logging(
+    log_level: str = "INFO",
+    log_file: str | None = None,
+    log_max_bytes: int | None = None,
+    log_backup_count: int | None = None,
+) -> None:
     """Set up console and optional file logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
@@ -26,7 +32,19 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None) -> None:
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+        max_bytes = 0 if log_max_bytes is None else max(log_max_bytes, 0)
+        backup_count = 0 if log_backup_count is None else max(log_backup_count, 0)
+        if max_bytes > 0 and backup_count > 0:
+            handlers.append(
+                RotatingFileHandler(
+                    log_path,
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                    encoding="utf-8",
+                )
+            )
+        else:
+            handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
 
     logging.basicConfig(
         level=numeric_level,
@@ -274,7 +292,12 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
     except SystemExit:
         return 1
 
-    setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
+    setup_logging(
+        getattr(args, "log_level", "INFO"),
+        config.get("log_file"),
+        config.get("log_max_bytes"),
+        config.get("log_backup_count"),
+    )
 
     # Collect INI parameter overrides
     ini_parameters = {}
@@ -329,6 +352,7 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
     years = config["years_to_process"]
     eddypro_exe = Path(config["eddypro_executable"])
     stream_output = config.get("stream_output", True)
+    log_eddypro_output = config.get("log_eddypro_output", True)
     metrics_interval = config.get("metrics_interval_seconds", 0.5)
     dry_run = args.dry_run
     config["dry_run"] = dry_run  # Store in config for manifest
@@ -487,6 +511,7 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
                 stream_output=stream_output,
                 metrics_interval=metrics_interval,
                 scenario_suffix="",
+                log_output=log_eddypro_output,
             )
 
             if not success:
@@ -592,13 +617,19 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
     except SystemExit:
         return 1
 
-    setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
+    setup_logging(
+        getattr(args, "log_level", "INFO"),
+        config.get("log_file"),
+        config.get("log_max_bytes"),
+        config.get("log_backup_count"),
+    )
 
     # Apply CLI overrides
     site_id = args.site if args.site else config.get("site_id")
     years = args.years if args.years else config.get("years_to_process", [])
     eddypro_exe = Path(config["eddypro_executable"])
     stream_output = config.get("stream_output", True)
+    log_eddypro_output = config.get("log_eddypro_output", True)
     metrics_interval = args.metrics_interval
 
     if not site_id:
@@ -672,6 +703,7 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
             input_dir=input_dir,
             ecmd_file=ecmd_file_path,
             dry_run=hasattr(args, "dry_run") and args.dry_run,
+            log_output=log_eddypro_output,
         )
 
         # Collect results for reporting
@@ -776,7 +808,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
         # SystemExit already logged by load_config
         return 1
 
-    setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
+    setup_logging(
+        getattr(args, "log_level", "INFO"),
+        config.get("log_file"),
+        config.get("log_max_bytes"),
+        config.get("log_backup_count"),
+    )
 
     # Run all validations
     results = validation.validate_all(
@@ -823,7 +860,12 @@ def cmd_status(args: argparse.Namespace) -> int:
         try:
             processor = core.EddyProBatchProcessor(config_path)
             config = processor.load_config()
-            setup_logging(getattr(args, "log_level", "INFO"), config.get("log_file"))
+            setup_logging(
+                getattr(args, "log_level", "INFO"),
+                config.get("log_file"),
+                config.get("log_max_bytes"),
+                config.get("log_backup_count"),
+            )
             reports_dir_config = config.get("reports_dir")
             if reports_dir_config:
                 reports_dir = Path(reports_dir_config)

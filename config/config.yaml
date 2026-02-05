@@ -70,6 +70,13 @@ log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
 # Optional log file path (null disables file logging)
 log_file: logs/eddypro_processing.log
 
+# Log rotation (bytes) and backup count (0 disables rotation)
+log_max_bytes: 10485760  # 10 MB
+log_backup_count: 5
+
+# Capture EddyPro stdout/stderr in logs
+log_eddypro_output: True
+
 # Performance monitoring configuration
 metrics_interval_seconds: 0.5  # Sampling interval for performance monitoring
 
