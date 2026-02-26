@@ -318,9 +318,13 @@ def populate_metadata_file(
         },
         "Instruments": {
             "instr_1_height": "SA_HEIGHT",
+            "instr_1_manufacturer": "SA_MANUFACTURER",
+            "instr_1_model": "SA_MODEL",
             "instr_1_wformat": "SA_WIND_DATA_FORMAT",
             "instr_1_wref": "SA_NORTH_ALIGNEMENT",
             "instr_1_north_offset": "SA_NORTH_OFFSET",
+            "instr_2_manufacturer": "GA_MANUFACTURER",
+            "instr_2_model": "GA_MODEL",
             "instr_2_tube_length": "GA_TUBE_LENGTH",
             "instr_2_tube_diameter": "GA_TUBE_DIAMETER",
             "instr_2_tube_flowrate": "GA_FLOWRATE",
@@ -342,6 +346,33 @@ def populate_metadata_file(
     if missing_values:
         unique = ", ".join(sorted(set(missing_values)))
         raise INIParameterError(f"ECMD row is missing required values: {unique}")
+
+    # Populate col_N_instrument fields in [FileDescription] from ECMD models.
+    # Sonic anemometer columns (u, v, w, ts, anemometer_diagnostic) use SA_MODEL.
+    # Gas analyzer columns (diag_72, co2, h2o, cell_t, int_t_1, int_t_2, int_p)
+    # use GA_MODEL.
+    sa_model = (ecmd_row.get("SA_MODEL", "") or "").strip()
+    ga_model = (ecmd_row.get("GA_MODEL", "") or "").strip()
+
+    if config.has_section("FileDescription") and sa_model and ga_model:
+        # Sonic anemometer variables
+        sa_variables = {"u", "v", "w", "ts", "anemometer_diagnostic"}
+        # Discover all column indices present in the section
+        col_indices: set[int] = set()
+        for key in config.options("FileDescription"):
+            parts = key.split("_")
+            if len(parts) >= 3 and parts[0] == "col" and parts[1].isdigit():
+                col_indices.add(int(parts[1]))
+
+        for col_idx in sorted(col_indices):
+            var_key = f"col_{col_idx}_variable"
+            instr_key = f"col_{col_idx}_instrument"
+            variable = config.get("FileDescription", var_key, fallback="")
+            if variable in sa_variables:
+                config.set("FileDescription", instr_key, sa_model)
+            elif variable:
+                # All other measured variables belong to the gas analyzer
+                config.set("FileDescription", instr_key, ga_model)
 
     write_metadata_file(config, metadata_path)
 

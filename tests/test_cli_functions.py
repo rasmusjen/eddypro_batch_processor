@@ -26,9 +26,9 @@ def _write_ecmd_file(tmp_path: Path, site_id: str) -> Path:
         "ACQUISITION_FREQUENCY,FILE_DURATION,SA_HEIGHT,SA_WIND_DATA_FORMAT,"
         "SA_NORTH_ALIGNEMENT,SA_NORTH_OFFSET,GA_TUBE_LENGTH,GA_TUBE_DIAMETER,"
         "GA_FLOWRATE,GA_NORTHWARD_SEPARATION,GA_EASTWARD_SEPARATION,"
-        "GA_VERTICAL_SEPARATION\n"
+        "GA_VERTICAL_SEPARATION,SA_MANUFACTURER,SA_MODEL,GA_MANUFACTURER,GA_MODEL\n"
         f"202001010000,{site_id},10,0.5,1.0,2.0,10,30,3.1,uvw,spar,"
-        "60,71.1,5.3,12,-11,-18,0\n"
+        "60,71.1,5.3,12,-11,-18,0,gill,hs_50_1,licor,li7200_1\n"
     )
     ecmd_path.write_text(content, encoding="utf-8")
     return ecmd_path

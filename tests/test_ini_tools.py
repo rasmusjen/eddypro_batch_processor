@@ -356,8 +356,8 @@ despike_meth=0
         config = configparser.ConfigParser()
         config.add_section("Project")
 
-        # Copy a real metadata template to a temp file
-        repo_meta = Path("config") / "GL-ZaF_metadata_template.ini"
+        # Copy the generic metadata template to a temp file
+        repo_meta = Path("config") / "metadata_template.ini"
         self.assertTrue(
             repo_meta.exists(),
             msg="Expected repository metadata template to exist for the test",
@@ -404,6 +404,10 @@ despike_meth=0
             "GA_NORTHWARD_SEPARATION": "-11",
             "GA_EASTWARD_SEPARATION": "-18",
             "GA_VERTICAL_SEPARATION": "0",
+            "SA_MANUFACTURER": "Gill",
+            "SA_MODEL": "R3",
+            "GA_MANUFACTURER": "LI-COR",
+            "GA_MODEL": "LI-7500",
         }
 
         output_dir = self.temp_dir / "out"
@@ -427,6 +431,24 @@ despike_meth=0
         self.assertEqual(config.get("Site", "altitude"), "38")
         self.assertEqual(config.get("Timing", "file_duration"), "30")
         self.assertEqual(config.get("Instruments", "instr_1_height"), "3.16")
+        self.assertEqual(config.get("Instruments", "instr_1_model"), "R3")
+        self.assertEqual(config.get("Instruments", "instr_2_model"), "LI-7500")
+
+        # col_N_instrument fields should be populated from ECMD models
+        # Sonic anemometer columns (u, v, w, ts, anemometer_diagnostic)
+        for col in range(1, 6):
+            self.assertEqual(
+                config.get("FileDescription", f"col_{col}_instrument"),
+                "R3",
+                msg=f"col_{col}_instrument should be SA_MODEL",
+            )
+        # Gas analyzer columns (diag_72, co2, h2o, cell_t, int_t_1, int_t_2, int_p)
+        for col in range(6, 13):
+            self.assertEqual(
+                config.get("FileDescription", f"col_{col}_instrument"),
+                "LI-7500",
+                msg=f"col_{col}_instrument should be GA_MODEL",
+            )
 
     def test_populate_metadata_file_missing_ecmd_values_raises(self):
         """Missing ECMD values should raise validation errors."""
@@ -520,6 +542,10 @@ despike_meth=0
             "GA_NORTHWARD_SEPARATION": "-11",
             "GA_EASTWARD_SEPARATION": "-18",
             "GA_VERTICAL_SEPARATION": "0",
+            "SA_MANUFACTURER": "Gill",
+            "SA_MODEL": "R3",
+            "GA_MANUFACTURER": "LI-COR",
+            "GA_MODEL": "LI-7500",
         }
 
         project_path = self.temp_dir / "SITE.eddypro"

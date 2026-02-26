@@ -21,12 +21,16 @@ def _write_ecmd_file(path: Path, rows: list[dict[str, str]]) -> None:
         "SA_WIND_DATA_FORMAT",
         "SA_NORTH_ALIGNEMENT",
         "SA_NORTH_OFFSET",
+        "SA_MANUFACTURER",
+        "SA_MODEL",
         "GA_TUBE_LENGTH",
         "GA_TUBE_DIAMETER",
         "GA_FLOWRATE",
         "GA_NORTHWARD_SEPARATION",
         "GA_EASTWARD_SEPARATION",
         "GA_VERTICAL_SEPARATION",
+        "GA_MANUFACTURER",
+        "GA_MODEL",
     ]
     lines = [",".join(header)]
     for row in rows:

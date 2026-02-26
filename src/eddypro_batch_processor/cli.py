@@ -415,10 +415,9 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
 
             # Materialize metadata files early (idempotent)
             try:
-                # Copy site-specific metadata template -> {site}.metadata
-                metadata_template = Path("config") / f"{site_id}_metadata_template.ini"
-                if not metadata_template.exists():
-                    metadata_template = Path("config") / "metadata_template.ini"
+                # Copy generic metadata template -> {site}.metadata
+                # All sites use the same template; ECMD values populate it.
+                metadata_template = Path("config") / "metadata_template.ini"
 
                 if metadata_template.exists():
                     shutil.copyfile(
