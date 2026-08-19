@@ -241,8 +241,7 @@ class TestRealWorkloadMonitoring:
     def burner_script(self, tmp_path):
         script = tmp_path / "burner.py"
         script.write_text(
-            textwrap.dedent(
-                """
+            textwrap.dedent("""
                 import os, sys, tempfile, time
                 end = time.time() + 3.0
                 d = tempfile.mkdtemp()
@@ -260,8 +259,7 @@ class TestRealWorkloadMonitoring:
                     with open(path, "rb") as fh:
                         fh.read()
                     i += 1
-                """
-            ),
+                """),
             encoding="utf-8",
         )
         return script

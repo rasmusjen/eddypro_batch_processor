@@ -34,9 +34,13 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
-    "ruff>=0.1.0",
-    "black>=23.0.0",
-    "mypy>=1.0.0",
+    # Upper bounds are deliberate: these are formatters/linters whose output
+    # changes between releases. Without them CI installs the newest version and
+    # disagrees with the pinned pre-commit hooks, which is green locally and red
+    # in CI. Bump these and .pre-commit-config.yaml together.
+    "ruff>=0.16.3,<0.17",
+    "black>=26.5.1,<27",
+    "mypy>=1.8.0",
     "pre-commit>=3.0.0",
     "bandit[toml]>=1.7.0",
     "types-PyYAML>=6.0.0",
@@ -73,6 +77,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "TRY", "PL"]
 ignore = [
     "TRY003",  # Allow custom exception messages
     "PLR0913", # Allow many function arguments (common in scientific code)
+    "PLR0917", # Same, for positional count: these are keyword-called in practice
     "PLR2004", # Allow magic values in non-test code (scientific constants)
     "PLR0912", # Allow many branches (legacy code)
     "PLR0915", # Allow many statements (legacy code)

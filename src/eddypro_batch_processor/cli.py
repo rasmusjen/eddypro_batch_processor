@@ -1018,9 +1018,9 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
                 ]
                 analyses.extend(scenario_analyses)
                 for mf in metrics_files:
-                    scenario_metrics[
-                        f"{name}_{mf.stem}"
-                    ] = report.load_metrics_from_csv(mf)
+                    scenario_metrics[f"{name}_{mf.stem}"] = (
+                        report.load_metrics_from_csv(mf)
+                    )
 
                 # Per-scenario report, promised by docs but never generated
                 # before: {output_dir}/reports/run_report.html

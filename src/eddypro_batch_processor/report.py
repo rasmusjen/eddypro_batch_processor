@@ -603,8 +603,7 @@ def generate_html_report(
     html_parts = []
 
     # HTML header
-    html_parts.append(
-        """
+    html_parts.append("""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -667,8 +666,7 @@ def generate_html_report(
 </head>
 <body>
     <div class="container">
-"""
-    )
+""")
 
     # Report title and summary
     run_id = run_manifest.get("run_id", "unknown")
@@ -680,8 +678,7 @@ def generate_html_report(
     status_class = "success" if overall_success else "failure"
     status_text = "SUCCESS" if overall_success else "FAILURE"
 
-    html_parts.append(
-        f"""
+    html_parts.append(f"""
         <h1>EddyPro Batch Processing Report</h1>
         <div class="summary-box">
             <h2>Run Summary</h2>
@@ -692,8 +689,7 @@ def generate_html_report(
             <p><strong>Years Processed:</strong> {", ".join(map(str, years))}</p>
             <p><strong>Overall Status:</strong> <span class="{status_class}">{status_text}</span></p>
         </div>
-"""
-    )
+""")
 
     # Performance health check: traffic-light bottleneck summary. Placed directly
     # under the run summary because it is the first thing a user wants to know.
@@ -715,8 +711,7 @@ def generate_html_report(
                 f"{status}"
             )
 
-        html_parts.append(
-            f"""
+        html_parts.append(f"""
         <h2>Performance Health Check</h2>
         <p><strong>Primary bottleneck:</strong>
            {metrics_summary.get("primary_bottleneck", "UNKNOWN")}</p>
@@ -726,12 +721,10 @@ def generate_html_report(
                 <th>Bottleneck</th><th>CPU p95</th><th>Peak RAM (MB)</th>
                 <th>Read (MB)</th><th>Write (MB)</th>
             </tr>
-"""
-        )
+""")
         for entry in perf_entries:
             cpu = entry.get("cpu", {}) or {}
-            html_parts.append(
-                f"""            <tr>
+            html_parts.append(f"""            <tr>
                 <td>{entry.get("scenario_name", "?")}</td>
                 <td>{_dot(entry.get("cpu_status", "UNKNOWN"))}</td>
                 <td>{_dot(entry.get("memory_status", "UNKNOWN"))}</td>
@@ -742,8 +735,7 @@ def generate_html_report(
                 <td>{entry.get("total_read_mb", 0):.0f}</td>
                 <td>{entry.get("total_write_mb", 0):.0f}</td>
             </tr>
-"""
-            )
+""")
         html_parts.append("        </table>\n")
         for entry in perf_entries:
             if entry.get("explanation"):
@@ -755,13 +747,11 @@ def generate_html_report(
     # Per-year results, including years that failed
     year_records = run_manifest.get("years", [])
     if year_records:
-        html_parts.append(
-            """
+        html_parts.append("""
         <h2>Per-Year Results</h2>
         <table>
             <tr><th>Year</th><th>Status</th><th>Duration (s)</th><th>Error</th></tr>
-"""
-        )
+""")
         for rec in year_records:
             html_parts.append(
                 f"            <tr><td>{rec.get('year', '?')}</td>"
@@ -774,8 +764,7 @@ def generate_html_report(
     # Scenario summary table
     scenarios = run_manifest.get("scenarios", [])
     if scenarios:
-        html_parts.append(
-            """
+        html_parts.append("""
         <h2>Scenario Results</h2>
         <table>
             <tr>
@@ -784,8 +773,7 @@ def generate_html_report(
                 <th>Duration (s)</th>
                 <th>Status</th>
             </tr>
-"""
-        )
+""")
         for scenario in scenarios:
             name = scenario.get("scenario_name", "unknown")
             params = scenario.get("scenario_params", {})
@@ -795,16 +783,14 @@ def generate_html_report(
             status_class = "success" if success else "failure"
             status_text = "SUCCESS" if success else "FAILURE"
 
-            html_parts.append(
-                f"""
+            html_parts.append(f"""
             <tr>
                 <td>{name}</td>
                 <td>{params_str or "baseline"}</td>
                 <td>{duration_s:.2f}</td>
                 <td class="{status_class}">{status_text}</td>
             </tr>
-"""
-            )
+""")
         html_parts.append("        </table>\n")
 
     # Performance charts (if available and requested)
@@ -827,48 +813,40 @@ def generate_html_report(
 
     # Environment information
     env_info = run_manifest.get("environment", {})
-    html_parts.append(
-        f"""
+    html_parts.append(f"""
         <h2>Environment</h2>
         <div class="summary-box">
             <p><strong>Python Version:</strong> {env_info.get("python_version", "unknown")}</p>
             <p><strong>Platform:</strong> {env_info.get("platform", "unknown")}</p>
             <p><strong>Processor:</strong> {env_info.get("processor", "unknown")}</p>
         </div>
-"""
-    )
+""")
 
     package_versions = env_info.get("package_versions", {})
     if package_versions:
-        html_parts.append(
-            """
+        html_parts.append("""
         <h3>Package Versions</h3>
         <table>
             <tr>
                 <th>Package</th>
                 <th>Version</th>
             </tr>
-"""
-        )
+""")
         for pkg, version in package_versions.items():
-            html_parts.append(
-                f"""
+            html_parts.append(f"""
             <tr>
                 <td>{pkg}</td>
                 <td>{version}</td>
             </tr>
-"""
-            )
+""")
         html_parts.append("        </table>\n")
 
     # HTML footer
-    html_parts.append(
-        """
+    html_parts.append("""
     </div>
 </body>
 </html>
-"""
-    )
+""")
 
     html_content = "".join(html_parts)
 

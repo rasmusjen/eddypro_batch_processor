@@ -42,8 +42,7 @@ class TestCLICommandFunctions:
         # Create a complete config file with all required fields
         ecmd_file = _write_ecmd_file(tmp_path, "test-site")
         config_file = tmp_path / "test_config.yaml"
-        config_file.write_text(
-            f"""
+        config_file.write_text(f"""
 site_id: test-site
 years_to_process: [2021]
 eddypro_executable: /fake/eddypro.exe
@@ -57,8 +56,7 @@ log_level: INFO
 metrics_interval_seconds: 0.5
 reports_dir: null
 report_charts: none
-"""
-        )
+""")
 
         args = argparse.Namespace(
             config=str(config_file),
@@ -80,8 +78,7 @@ report_charts: none
         """Test cmd_run with site override."""
         ecmd_file = _write_ecmd_file(tmp_path, "TEST-SITE")
         config_file = tmp_path / "test_config.yaml"
-        config_file.write_text(
-            f"""
+        config_file.write_text(f"""
 site_id: original-site
 years_to_process: [2021]
 eddypro_executable: /fake/eddypro.exe
@@ -95,8 +92,7 @@ log_level: INFO
 metrics_interval_seconds: 0.5
 reports_dir: null
 report_charts: none
-"""
-        )
+""")
 
         args = argparse.Namespace(
             config=str(config_file),
@@ -117,8 +113,7 @@ report_charts: none
         """Test cmd_run with years override."""
         ecmd_file = _write_ecmd_file(tmp_path, "test-site")
         config_file = tmp_path / "test_config.yaml"
-        config_file.write_text(
-            f"""
+        config_file.write_text(f"""
 site_id: test-site
 years_to_process: [2020]
 eddypro_executable: /fake/eddypro.exe
@@ -132,8 +127,7 @@ log_level: INFO
 metrics_interval_seconds: 0.5
 reports_dir: null
 report_charts: none
-"""
-        )
+""")
 
         args = argparse.Namespace(
             config=str(config_file),
@@ -154,8 +148,7 @@ report_charts: none
         """Test cmd_run with dry run enabled."""
         ecmd_file = _write_ecmd_file(tmp_path, "test-site")
         config_file = tmp_path / "test_config.yaml"
-        config_file.write_text(
-            f"""
+        config_file.write_text(f"""
 site_id: test-site
 years_to_process: [2021]
 eddypro_executable: /fake/eddypro.exe
@@ -169,8 +162,7 @@ log_level: INFO
 metrics_interval_seconds: 0.5
 reports_dir: null
 report_charts: none
-"""
-        )
+""")
 
         args = argparse.Namespace(
             config=str(config_file),
@@ -197,8 +189,7 @@ report_charts: none
 
         ecmd_file = _write_ecmd_file(tmp_path, site_id)
         config_file = tmp_path / "test_config.yaml"
-        config_file.write_text(
-            f"""
+        config_file.write_text(f"""
 site_id: {site_id}
 years_to_process: [{year}]
 eddypro_executable: /fake/eddypro.exe
@@ -212,8 +203,7 @@ log_level: INFO
 metrics_interval_seconds: 0.5
 reports_dir: null
 report_charts: none
-"""
-        )
+""")
 
         args = argparse.Namespace(
             config=str(config_file),
@@ -390,8 +380,7 @@ report_charts: none
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         manifest_file = reports_dir / "run_manifest.json"
-        manifest_file.write_text(
-            """
+        manifest_file.write_text("""
 {
   "run_id": "test-run-123",
   "config_snapshot": {},
@@ -400,8 +389,7 @@ report_charts: none
   "end_time": "2024-01-01T01:00:00",
   "dry_run": true
 }
-"""
-        )
+""")
 
         args = argparse.Namespace(
             reports_dir=str(reports_dir),
@@ -416,8 +404,7 @@ report_charts: none
         reports_dir = tmp_path / "custom_reports"
         reports_dir.mkdir()
         manifest_file = reports_dir / "run_manifest.json"
-        manifest_file.write_text(
-            """
+        manifest_file.write_text("""
 {
   "run_id": "custom-run-456",
   "config_snapshot": {},
@@ -426,8 +413,7 @@ report_charts: none
   "end_time": "2024-02-01T02:00:00",
   "dry_run": false
 }
-"""
-        )
+""")
 
         args = argparse.Namespace(
             reports_dir=str(reports_dir),
