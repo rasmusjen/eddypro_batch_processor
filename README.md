@@ -170,38 +170,29 @@ source venv/bin/activate
    local `bin/` copy strategy as `scenarios`. If `eddypro_rp` fails, `eddypro_fcc`
    is skipped.
 
-3. **Run a single scenario with specific parameters:**
+3. **Process several years with the same settings (multi-year run):**
 
    ```bash
-   eddypro-batch --config config/config.yaml run --site GL-ZaF --years 2021 --rot-meth 1 --tlag-meth 2 --detrend-meth 0 --despike-meth 1 --hf-meth 4
+   eddypro-batch --config config/config.yaml run --site GL-Dsk --years 2020 2021 2022 2023 2024 2025 --mp --max-proc 6
    ```
 
-4. **Test all combinations of parameter scenarios (Cartesian product):**
+   See [MULTI_YEAR_RUNS.md](docs/MULTI_YEAR_RUNS.md) for a complete worked
+   example (config file and pure-CLI forms, choosing `max_processes`,
+   reading the performance bottleneck report).
 
-   This example tests all 16 combinations (2×2×2×2):
+4. **Test combinations of processing parameters (scenario matrix):**
 
    ```bash
    eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-meth 0 1
    ```
 
-   With high-frequency correction methods added, you can test up to 32 combinations (2×2×2×2×2):
-
-   ```bash
-   eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-meth 0 1 --hf-meth 1 4
-   ```
-
-   **Parameter meanings:**
-
-   - `--rot-meth 1 3` → Rotation methods: 1=Double Rotation (DR), 3=Planar Fit (PF)
-   - `--tlag-meth 2 4` → Time lag methods: 2=Constant (CMD), 4=Automatic Optimization (AO)
-   - `--detrend-meth 0 1` → Detrending: 0=Block Average (BA), 1=Linear Detrending (LD)
-   - `--despike-meth 0 1` → Spike removal: 0=Vickers & Mahrt (1997), 1=Mauder et al. (2013)
-   - `--hf-meth 1 4` → High-frequency spectral correction: 1=Moncrieff et al. (1997) analytic, 4=Fratini et al. (2012) in situ/analytic
-
-   Each scenario runs independently and produces separate output files in
-   `scenario{suffix}` directories (e.g., `scenario_rot1_tlag2_det0_spk1`).
-
-   See [SCENARIOS.md](docs/SCENARIOS.md) for detailed documentation on scenario runs.
+   This tests all 16 combinations (2×2×2×2) of rotation, time lag, detrend,
+   and spike-removal methods; add `--hf-meth 1 4` for up to 32. Each
+   scenario runs independently and produces its own output directory and
+   HTML report. See [SCENARIOS.md](docs/SCENARIOS.md) for the full parameter
+   table, naming conventions, and more examples — note that a *scenario*
+   run (many parameter combinations, one year) is different from a
+   *multi-year* run (one set of parameters, many years) shown above.
 
 5. **Dry-run mode (generate files without executing EddyPro):**
 
@@ -219,80 +210,26 @@ source venv/bin/activate
 
 For detailed information, see the `docs/` directory:
 
+- **[MULTI_YEAR_RUNS.md](docs/MULTI_YEAR_RUNS.md)** – Worked multi-year run example (same settings, many years) — start here if that's your use case
 - **[USAGE.md](docs/USAGE.md)** – Complete CLI usage guide with all command examples and options
 - **[CONFIG.md](docs/CONFIG.md)** – Configuration file reference, YAML structure, and ECMD format specifications
-- **[SCENARIOS.md](docs/SCENARIOS.md)** – Scenario matrix runs, parameter testing, and naming conventions
+- **[SCENARIOS.md](docs/SCENARIOS.md)** – Scenario matrix runs (parameter combinations), naming conventions
 - **[REPORTING.md](docs/REPORTING.md)** – Understanding reports, performance metrics, and manifest structure
 - **[OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md)** – Machine-readable output file tracking in manifests
 - **[KNOWN_ISSUES_AND_TODO.md](docs/KNOWN_ISSUES_AND_TODO.md)** – Known issues, gaps, and roadmap items
 - **[DEVELOPMENT.md](docs/DEVELOPMENT.md)** – Contributing guidelines, development setup, and testing
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** – System design and module organization
-- **[plan/IMPROVEMENT_PLAN.md](docs/plan/IMPROVEMENT_PLAN.md)** – Project roadmap and completed milestones
+- **[plan/implemented/IMPROVEMENT_PLAN.md](docs/plan/implemented/IMPROVEMENT_PLAN.md)** – Project roadmap and completed milestones
 
 ## Key Capabilities
 
-### Configuration Validation
+- **Configuration validation** (`eddypro-batch validate`) — required keys/types, path existence, ECMD schema and sanity checks
+- **Multi-year runs** — process several years with identical settings, optionally in parallel (`--mp --max-proc N`); see [MULTI_YEAR_RUNS.md](docs/MULTI_YEAR_RUNS.md)
+- **Scenario matrix testing** (`eddypro-batch scenarios`) — Cartesian product of up to 32 parameter combinations by default (`--max-scenarios`); see [SCENARIOS.md](docs/SCENARIOS.md)
+- **Performance monitoring** — CPU, memory, and disk I/O sampled from the whole EddyPro process tree, with a CPU/MEMORY/DISK_THROUGHPUT/DISK_IOPS bottleneck classification; toggle with `monitoring_enabled` / `--monitor` / `--no-monitor`
+- **Reporting** — HTML reports (for both `run` and `scenarios`, plus an aggregate comparison report for `scenarios`) and JSON `run_manifest.json` with provenance (git SHA, config checksum, EddyPro executable checksum, `sys.argv`)
 
-Catch configuration errors before processing:
-
-```bash
-eddypro-batch --config config/config.yaml validate
-```
-
-Validates:
-
-- Required config keys and types
-- Path existence (EddyPro executable, input directories, ECMD file)
-- ECMD schema (required columns, data types)
-- Sanity checks (positive values, non-empty fields)
-
-### Scenario Matrix Testing
-
-Test multiple parameter combinations systematically. The `scenarios` command creates a Cartesian product of all parameter values:
-
-```bash
-eddypro-batch --config config/config.yaml scenarios --site GL-ZaF --years 2021 --rot-meth 1 3 --tlag-meth 2 4 --detrend-meth 0 1 --despike-meth 0 1
-```
-
-This creates 16 scenarios (2×2×2×2) with all combinations:
-
-- Rotation: Double Rotation (1) and Planar Fit (3)
-- Time lag: Constant (2) and Automatic Optimization (4)
-- Detrending: Block Average (0) and Linear Detrending (1)
-- Spike removal: Vickers & Mahrt (0) and Mauder et al. (1)
-
-Each scenario is named uniquely (e.g., `scenario_rot1_tlag2_det0_spk1`) and
-processed independently. Results are tracked in the run manifest for comparison.
-
-**Note:** Maximum 32 scenarios allowed (configurable via `--max-scenarios`). See [SCENARIOS.md](docs/SCENARIOS.md) for details.
-
-### Performance Monitoring
-
-Track resource usage during processing:
-
-- CPU utilization (process and system)
-- Memory usage (RSS, peak)
-- Disk I/O (read/write MB, IOPS)
-- Processing duration
-
-Metrics are saved per scenario and aggregated in reports.
-
-### Comprehensive Reporting
-
-Generates detailed reports after each run:
-
-- **HTML reports** with interactive Plotly charts (CPU, memory, I/O over time)
-- **JSON manifests** (`run_manifest.json`) for programmatic analysis
-  - Complete scenario results with success/failure status
-  - Machine-readable output file tracking (all EddyPro CSV outputs)
-  - Duration, metrics summary, and configuration snapshot
-- **Per-scenario metrics** (CSV time series of resource usage)
-- **Provenance capture** (config checksum, git SHA, Python environment, package versions)
-
-Reports are saved to `{output_dir}/reports/` by default. HTML reports are
-generated for `run` executions; `scenarios` currently writes a run manifest only.
-See [REPORTING.md](docs/REPORTING.md) and [OUTPUT_FILE_TRACKING.md](docs/OUTPUT_FILE_TRACKING.md)
-for details.
+See [CONFIG.md](docs/CONFIG.md) and [REPORTING.md](docs/REPORTING.md) for full details.
 
 ## Configuration Example
 
@@ -303,17 +240,17 @@ years_to_process: [2021, 2022, 2023]
 input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
 output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux"
 ecmd_file: "D:/L1_processed/{site_id}/ecmd/{site_id}_ecmd.csv"
-
 multiprocessing: False
-max_processes: 16
-stream_output: True
-log_level: INFO
-
-metrics_interval_seconds: 0.5
-report_charts: plotly  # Options: plotly, svg, none
+monitoring_enabled: true
+report_charts: plotly
 ```
 
-See [CONFIG.md](docs/CONFIG.md) for all options and details.
+This is a short excerpt. The full, authoritative example with every key and
+comments is [`config/config.yaml.example`](config/config.yaml.example); see
+[CONFIG.md](docs/CONFIG.md) for the key-by-key reference and
+[MULTI_YEAR_RUNS.md](docs/MULTI_YEAR_RUNS.md) /
+[`examples/multi_year_config.yaml`](examples/multi_year_config.yaml) for a
+complete real-world example.
 
 ## Contributing
 

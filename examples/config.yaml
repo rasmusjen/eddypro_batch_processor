@@ -1,5 +1,8 @@
 # Example Configuration for EddyPro Batch Processor
-# Copy this file to config/config.yaml and customize for your environment
+# Copy this file to config/config.yaml and customize for your environment.
+# For the full annotated reference (every key), see config/config.yaml.example
+# and docs/CONFIG.md. For a real multi-year worked example, see
+# examples/multi_year_config.yaml and docs/MULTI_YEAR_RUNS.md.
 
 # EddyPro executable path (update for your installation)
 eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
@@ -17,12 +20,19 @@ output_dir_pattern: "data/processed/{site_id}/{year}"
 ecmd_file: "data/{site_id}_ecmd.csv"
 
 # Processing options
-multiprocessing: false  # Set to true for parallel processing
-max_processes: 4       # Adjust based on your CPU cores
-stream_output: true    # Show EddyPro output during processing
+multiprocessing: false  # Set to true for parallel processing across years
+max_processes: 4        # Adjust based on your CPU cores
+stream_output: true     # Show EddyPro output during processing
 
-# Logging and monitoring
+# Logging
 log_level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_file: null   # Optional: path to a log file (null disables file logging)
+log_max_bytes: 10485760  # Log rotation size in bytes (0 disables rotation)
+log_backup_count: 5      # Number of rotated log files to keep
+log_eddypro_output: true # Capture EddyPro stdout/stderr in logs
+
+# Performance monitoring
+monitoring_enabled: true  # Set to false to skip CPU/memory/disk sampling entirely
 metrics_interval_seconds: 0.5
 
 # Reporting

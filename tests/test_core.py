@@ -258,8 +258,13 @@ class TestRunEddyProWithMonitoring:
         rp_call = mock_run.call_args_list[0].kwargs
         fcc_call = mock_run.call_args_list[1].kwargs
 
-        assert "eddypro_rp.exe" in rp_call["command"]
-        assert "eddypro_fcc.exe" in fcc_call["command"]
+        # The command must be an argv list, not a shell string: with shell=True
+        # the monitored PID would be cmd.exe rather than EddyPro.
+        assert isinstance(rp_call["command"], list)
+        assert isinstance(fcc_call["command"], list)
+        assert "eddypro_rp.exe" in rp_call["command"][0]
+        assert "eddypro_fcc.exe" in fcc_call["command"][0]
+        assert str(project_file) in rp_call["command"]
         assert rp_call["working_dir"] == project_dir.parent
         assert fcc_call["working_dir"] == project_dir.parent
         assert rp_call["scenario_suffix"] == "rp"

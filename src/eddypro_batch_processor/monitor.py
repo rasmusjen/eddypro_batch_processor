@@ -3,6 +3,19 @@ Performance monitoring module for EddyPro batch processing.
 
 This module provides performance monitoring capabilities using psutil to track
 CPU, memory, and I/O metrics during EddyPro subprocess execution.
+
+Design notes
+------------
+The monitored unit is a **process tree**, not a single process. EddyPro is launched
+as a child process and may itself spawn workers, so every sample walks
+``root.children(recursive=True)`` and aggregates across the whole tree. Sampling a
+single PID was the historical cause of all-zero metrics.
+
+Disk I/O is exposed two ways: cumulative totals since monitoring started
+(``read_mb`` / ``write_mb``) and instantaneous rates derived from the delta between
+consecutive samples divided by the *actual* elapsed wall time (``read_mb_per_s`` /
+``write_mb_per_s``). Raw psutil counters are monotonic since boot and are never
+reported directly, because aggregate statistics over them are meaningless.
 """
 
 import csv
@@ -24,14 +37,41 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+#: Bumped whenever the CSV column set or summary JSON structure changes.
+METRICS_SCHEMA_VERSION = 2
+
+#: Canonical column order for ``metrics.csv``. The first six columns are the
+#: contract consumed by :mod:`eddypro_batch_processor.report`.
+METRICS_FIELDNAMES = [
+    "timestamp",
+    "relative_time",
+    "cpu_percent",
+    "cpu_percent_of_core",
+    "memory_mb",
+    "read_mb",
+    "write_mb",
+    "read_mb_per_s",
+    "write_mb_per_s",
+    "read_iops",
+    "write_iops",
+    "num_processes",
+    "system_cpu_percent",
+    "system_memory_percent",
+    "system_memory_used_mb",
+    "system_read_mb_per_s",
+    "system_write_mb_per_s",
+]
+
+_BYTES_PER_MB = 1024.0 * 1024.0
+
 
 class PerformanceMonitor:
     """
-    Monitor system and process performance metrics during operations.
+    Monitor system and process-tree performance metrics during operations.
 
-    Tracks CPU utilization, memory usage (RSS/peak), disk I/O, and wall-clock time
-    with configurable sampling intervals. Produces both time series (CSV) and
-    summary (JSON) outputs.
+    Tracks CPU utilization, memory usage, and disk I/O (both cumulative and as
+    rates) with a configurable sampling interval. Produces a time series (CSV) and
+    a summary (JSON).
     """
 
     def __init__(
@@ -61,15 +101,32 @@ class PerformanceMonitor:
         self.output_dir = Path(output_dir) if output_dir else Path.cwd()
         self.scenario_suffix = scenario_suffix
 
+        # Number of logical CPUs, used to normalise process CPU onto a 0-100 scale
+        # so it is directly comparable with psutil.cpu_percent().
+        self._cpu_count = psutil.cpu_count() or 1
+
         # Monitoring state
         self._monitoring = False
         self._monitor_thread: threading.Thread | None = None
         self._start_time: float | None = None
         self._end_time: float | None = None
 
-        # Data storage
+        # Data storage. _samples is touched by both the sampler thread and the
+        # writer on the main thread, so it is guarded by _lock.
         self._samples: list[dict[str, Any]] = []
+        self._lock = threading.Lock()
         self._process: psutil.Process | None = None
+
+        # Per-PID cumulative I/O counters, retained after a child exits so the
+        # tree total never goes backwards when a worker finishes.
+        self._io_by_pid: dict[int, tuple[float, float, float, float]] = {}
+        self._io_baseline: tuple[float, float, float, float] | None = None
+        self._primed_pids: set[int] = set()
+
+        # Previous sample state, for delta-based rate computation
+        self._prev_time: float | None = None
+        self._prev_io: tuple[float, float, float, float] | None = None
+        self._prev_system_io: tuple[float, float] | None = None
 
         # Output file paths
         self._metrics_csv_path = self._get_output_path("metrics.csv")
@@ -82,12 +139,18 @@ class PerformanceMonitor:
             filename = f"{name}_{self.scenario_suffix}.{ext}"
         return self.output_dir / filename
 
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
     def start_monitoring(self, process_pid: int | None = None) -> None:
         """
         Start performance monitoring.
 
         Args:
-            process_pid: PID of specific process to monitor. If None, monitors system.
+            process_pid: PID of the root process to monitor, including all of its
+                descendants. If None, only system-wide metrics are recorded until
+                :meth:`attach_process` is called.
         """
         if self._monitoring:
             logger.warning("Monitoring already active")
@@ -99,19 +162,22 @@ class PerformanceMonitor:
 
         self._monitoring = True
         self._start_time = time.time()
-        self._samples.clear()
+        with self._lock:
+            self._samples.clear()
+        self._io_by_pid.clear()
+        self._io_baseline = None
+        self._primed_pids.clear()
+        self._prev_time = None
+        self._prev_io = None
+        self._prev_system_io = None
 
-        # Set up process monitoring if PID provided
+        # Prime the system-wide CPU counter. The first call after import always
+        # returns 0.0 because there is no previous measurement to diff against.
+        psutil.cpu_percent(interval=None)
+
         if process_pid:
-            try:
-                self._process = psutil.Process(process_pid)
-            except Exception:
-                logger.warning(
-                    f"Process {process_pid} not found, monitoring system instead"
-                )
-                self._process = None
+            self.attach_process(process_pid)
 
-        # Start monitoring thread
         self._monitor_thread = threading.Thread(
             target=self._monitor_loop, daemon=True, name="PerformanceMonitor"
         )
@@ -121,6 +187,43 @@ class PerformanceMonitor:
             f"Started performance monitoring (interval: {self.interval_seconds}s, "
             f"process: {process_pid or 'system'})"
         )
+
+    def attach_process(self, process_pid: int) -> bool:
+        """
+        Attach to a process tree after monitoring has already started.
+
+        This lets the caller spawn the subprocess first and then point the running
+        monitor at it, without the stop/restart cycle that used to truncate the
+        metrics files.
+
+        Args:
+            process_pid: PID of the root process to monitor.
+
+        Returns:
+            True if the process was found and attached.
+        """
+        try:
+            self._process = psutil.Process(process_pid)
+        except Exception:
+            logger.warning(
+                f"Process {process_pid} not found, monitoring system-wide only"
+            )
+            self._process = None
+            return False
+
+        # Prime per-process CPU so the first real sample is not 0.0.
+        for proc in self._iter_tracked():
+            try:
+                proc.cpu_percent(None)
+                self._primed_pids.add(proc.pid)
+            # nosec B112 - a process that vanishes or denies access between the
+            # tree walk and this call must be skipped, not allowed to abort
+            # priming for the rest of the tree.
+            except Exception:  # noqa: PERF203  # nosec B112
+                continue
+
+        logger.debug(f"Attached performance monitor to PID {process_pid}")
+        return True
 
     def stop_monitoring(self) -> dict[str, Any]:
         """
@@ -136,24 +239,27 @@ class PerformanceMonitor:
         self._monitoring = False
         self._end_time = time.time()
 
-        # Wait for monitor thread to finish
+        # Wait for the sampler thread. The timeout must exceed one full sampling
+        # period or a slow interval would race the CSV writer.
         if self._monitor_thread and self._monitor_thread.is_alive():
-            self._monitor_thread.join(timeout=2.0)
+            self._monitor_thread.join(timeout=max(5.0, self.interval_seconds * 2))
 
-        # Generate summary
         summary = self._generate_summary()
 
-        # Write outputs
         self._write_metrics_csv()
         self._write_summary_json(summary)
 
+        duration = summary.get("timing", {}).get("duration_seconds", 0.0)
         logger.info(
             f"Stopped performance monitoring. "
-            f"Duration: {summary.get('duration_seconds', 0):.2f}s, "
-            f"Samples: {len(self._samples)}"
+            f"Duration: {duration:.2f}s, Samples: {len(self._samples)}"
         )
 
         return summary
+
+    # ------------------------------------------------------------------
+    # Sampling
+    # ------------------------------------------------------------------
 
     def _monitor_loop(self) -> None:
         """Main monitoring loop running in background thread."""
@@ -161,178 +267,290 @@ class PerformanceMonitor:
             try:
                 sample = self._collect_sample()
                 if sample:
-                    self._samples.append(sample)
+                    with self._lock:
+                        self._samples.append(sample)
             except Exception as e:
                 logger.warning(f"Error collecting performance sample: {e}")
 
             time.sleep(self.interval_seconds)
+
+    def _iter_tracked(self) -> list[Any]:
+        """
+        Return the root process plus every living descendant.
+
+        Re-walked on every sample so workers spawned mid-run are picked up. A
+        vanished root yields an empty list but never clears ``self._process`` --
+        transient errors must not permanently disable process monitoring.
+        """
+        if not self._process:
+            return []
+        try:
+            return [self._process, *self._process.children(recursive=True)]
+        except Exception:
+            return []
 
     def _collect_sample(self) -> dict[str, Any] | None:
         """
         Collect a single performance sample.
 
         Returns:
-            Dictionary with timestamp and performance metrics, or None on error
+            Dictionary of canonical metrics, or None on error.
         """
         try:
             timestamp = time.time()
-            sample = {
+            elapsed = (
+                timestamp - self._prev_time if self._prev_time is not None else None
+            )
+
+            sample: dict[str, Any] = {
                 "timestamp": timestamp,
                 "relative_time": timestamp - (self._start_time or timestamp),
             }
+            sample.update(self._collect_system_metrics(elapsed))
+            sample.update(self._collect_process_metrics(elapsed))
 
-            # System-wide metrics
-            sample.update(self._collect_system_metrics())
-
-            # Process-specific metrics if available
-            if self._process:
-                process_metrics = self._collect_process_metrics()
-                if process_metrics:
-                    sample.update(process_metrics)
-
+            self._prev_time = timestamp
         except Exception as e:
             logger.debug(f"Failed to collect sample: {e}")
             return None
         else:
             return sample
 
-    def _collect_system_metrics(self) -> dict[str, Any]:
-        """Collect system-wide performance metrics."""
-        metrics = {}
+    def _collect_system_metrics(self, elapsed: float | None) -> dict[str, Any]:
+        """Collect system-wide metrics, converting disk counters into rates."""
+        metrics: dict[str, Any] = {
+            "system_cpu_percent": 0.0,
+            "system_memory_percent": 0.0,
+            "system_memory_used_mb": 0.0,
+            "system_read_mb_per_s": 0.0,
+            "system_write_mb_per_s": 0.0,
+        }
 
         try:
-            # CPU utilization
-            cpu_percent = psutil.cpu_percent(interval=0)
-            metrics["system_cpu_percent"] = cpu_percent
+            metrics["system_cpu_percent"] = psutil.cpu_percent(interval=None)
 
-            # Memory usage
             memory = psutil.virtual_memory()
-            metrics["system_memory_total"] = memory.total
-            metrics["system_memory_available"] = memory.available
             metrics["system_memory_percent"] = memory.percent
+            metrics["system_memory_used_mb"] = (
+                memory.total - memory.available
+            ) / _BYTES_PER_MB
 
-            # Disk I/O
             disk_io = psutil.disk_io_counters()
             if disk_io:
-                metrics["system_disk_read_bytes"] = disk_io.read_bytes
-                metrics["system_disk_write_bytes"] = disk_io.write_bytes
-                metrics["system_disk_read_count"] = disk_io.read_count
-                metrics["system_disk_write_count"] = disk_io.write_count
-
-            # Network I/O (optional)
-            try:
-                network_io = psutil.net_io_counters()
-                if network_io:
-                    metrics["system_network_bytes_sent"] = network_io.bytes_sent
-                    metrics["system_network_bytes_recv"] = network_io.bytes_recv
-            except AttributeError:
-                pass  # Network counters not available on all systems
+                current = (float(disk_io.read_bytes), float(disk_io.write_bytes))
+                if self._prev_system_io is not None and elapsed and elapsed > 0:
+                    metrics["system_read_mb_per_s"] = max(
+                        0.0, (current[0] - self._prev_system_io[0])
+                    ) / (_BYTES_PER_MB * elapsed)
+                    metrics["system_write_mb_per_s"] = max(
+                        0.0, (current[1] - self._prev_system_io[1])
+                    ) / (_BYTES_PER_MB * elapsed)
+                self._prev_system_io = current
 
         except Exception as e:
             logger.debug(f"Error collecting system metrics: {e}")
 
         return metrics
 
-    def _collect_process_metrics(self) -> dict[str, Any] | None:
-        """Collect process-specific performance metrics."""
-        if not self._process:
-            return None
+    def _collect_process_metrics(self, elapsed: float | None) -> dict[str, Any]:
+        """
+        Aggregate CPU, memory, and I/O across the monitored process tree.
 
-        try:
-            # Check if process still exists
-            if not self._process.is_running():
-                logger.debug("Monitored process no longer running")
-                self._process = None
-                return None
+        Every psutil call is guarded per-process: a child that exits between the
+        tree walk and the read is skipped, and an ``AccessDenied`` on one process
+        never aborts the sample or disables monitoring.
+        """
+        metrics: dict[str, Any] = {
+            "cpu_percent": 0.0,
+            "cpu_percent_of_core": 0.0,
+            "memory_mb": 0.0,
+            "read_mb": 0.0,
+            "write_mb": 0.0,
+            "read_mb_per_s": 0.0,
+            "write_mb_per_s": 0.0,
+            "read_iops": 0.0,
+            "write_iops": 0.0,
+            "num_processes": 0,
+        }
 
-            metrics = {}
-
-            # CPU usage
-            try:
-                cpu_percent = self._process.cpu_percent()
-                metrics["process_cpu_percent"] = cpu_percent
-            except Exception:  # nosec B110
-                pass
-
-            # Memory usage
-            try:
-                memory_info = self._process.memory_info()
-                metrics["process_memory_rss"] = memory_info.rss
-                metrics["process_memory_vms"] = memory_info.vms
-
-                # Memory percent
-                memory_percent = self._process.memory_percent()
-                metrics["process_memory_percent"] = memory_percent
-            except Exception:  # nosec B110
-                pass
-
-            # I/O counters
-            try:
-                io_counters = self._process.io_counters()
-                metrics["process_io_read_bytes"] = io_counters.read_bytes
-                metrics["process_io_write_bytes"] = io_counters.write_bytes
-                metrics["process_io_read_count"] = io_counters.read_count
-                metrics["process_io_write_count"] = io_counters.write_count
-            except Exception:  # nosec B110
-                pass  # I/O counters not available on all platforms
-
-        except Exception:
-            logger.debug("Error collecting process metrics")
-            self._process = None
-            return None
-        else:
+        tracked = self._iter_tracked()
+        if not tracked:
+            # The tree has exited. Cumulative totals must hold their final value
+            # rather than snapping back to zero -- read_mb/write_mb are
+            # monotonic by contract, and consumers chart them as such.
+            self._fill_cumulative_io(metrics)
             return metrics
+
+        total_cpu = 0.0
+        total_rss = 0.0
+        alive = 0
+
+        for proc in tracked:
+            try:
+                with proc.oneshot():
+                    # A process seen for the first time must be primed; its first
+                    # cpu_percent() reading is meaningless and is discarded.
+                    if proc.pid not in self._primed_pids:
+                        proc.cpu_percent(None)
+                        self._primed_pids.add(proc.pid)
+                    else:
+                        total_cpu += proc.cpu_percent(None)
+
+                    total_rss += float(proc.memory_info().rss)
+                    alive += 1
+
+                    try:
+                        io = proc.io_counters()
+                    except Exception:
+                        io = None
+
+                if io is not None:
+                    # Retain the last known counters per PID so a finished child
+                    # keeps contributing to the tree total.
+                    self._io_by_pid[proc.pid] = (
+                        float(io.read_bytes),
+                        float(io.write_bytes),
+                        float(io.read_count),
+                        float(io.write_count),
+                    )
+            # nosec B112 - NoSuchProcess / AccessDenied / ZombieProcess: skip
+            # this process only. self._process is deliberately left intact,
+            # because nulling it on the first transient error is what used to
+            # silently disable process monitoring for the rest of the run.
+            except Exception:  # noqa: PERF203  # nosec B112
+                continue
+
+        metrics["num_processes"] = alive
+        # Normalise onto 0-100 so this column is comparable with system_cpu_percent.
+        metrics["cpu_percent"] = round(total_cpu / self._cpu_count, 3)
+        # Un-normalised: 100 means "one core fully busy", 200 means two, and so on.
+        # EddyPro is largely single-threaded, so this is the column that reveals a
+        # saturated single core on a many-core machine.
+        metrics["cpu_percent_of_core"] = round(total_cpu, 3)
+        metrics["memory_mb"] = round(total_rss / _BYTES_PER_MB, 3)
+
+        totals = self._fill_cumulative_io(metrics)
+        if totals is not None:
+            if self._prev_io is not None and elapsed and elapsed > 0:
+                metrics["read_mb_per_s"] = round(
+                    max(0.0, totals[0] - self._prev_io[0]) / (_BYTES_PER_MB * elapsed),
+                    3,
+                )
+                metrics["write_mb_per_s"] = round(
+                    max(0.0, totals[1] - self._prev_io[1]) / (_BYTES_PER_MB * elapsed),
+                    3,
+                )
+                metrics["read_iops"] = round(
+                    max(0.0, totals[2] - self._prev_io[2]) / elapsed, 2
+                )
+                metrics["write_iops"] = round(
+                    max(0.0, totals[3] - self._prev_io[3]) / elapsed, 2
+                )
+            self._prev_io = totals
+
+        return metrics
+
+    def _fill_cumulative_io(
+        self, metrics: dict[str, Any]
+    ) -> tuple[float, float, float, float] | None:
+        """
+        Set read_mb/write_mb from retained per-PID counters.
+
+        Returns the raw aggregate totals so the caller can derive rates, or None
+        if no I/O counters have ever been observed.
+        """
+        totals = self._aggregate_io()
+        if totals is None:
+            return None
+        if self._io_baseline is None:
+            self._io_baseline = totals
+        base = self._io_baseline
+        metrics["read_mb"] = round(max(0.0, totals[0] - base[0]) / _BYTES_PER_MB, 3)
+        metrics["write_mb"] = round(max(0.0, totals[1] - base[1]) / _BYTES_PER_MB, 3)
+        return totals
+
+    def _aggregate_io(self) -> tuple[float, float, float, float] | None:
+        """Sum retained per-PID I/O counters across the whole tree."""
+        if not self._io_by_pid:
+            return None
+        read = write = rcount = wcount = 0.0
+        for r, w, rc, wc in self._io_by_pid.values():
+            read += r
+            write += w
+            rcount += rc
+            wcount += wc
+        return (read, write, rcount, wcount)
+
+    # ------------------------------------------------------------------
+    # Summary and output
+    # ------------------------------------------------------------------
 
     def _generate_summary(self) -> dict[str, Any]:
         """Generate summary statistics from collected samples."""
-        if not self._samples:
-            return {"error": "No samples collected"}
+        with self._lock:
+            samples = list(self._samples)
 
-        summary = {
+        duration = (self._end_time or 0) - (self._start_time or 0)
+
+        if not samples:
+            return {
+                "schema_version": METRICS_SCHEMA_VERSION,
+                "error": "No samples collected",
+                "timing": {
+                    "start_time": self._start_time,
+                    "end_time": self._end_time,
+                    "duration_seconds": duration,
+                },
+            }
+
+        summary: dict[str, Any] = {
+            "schema_version": METRICS_SCHEMA_VERSION,
             "monitoring_config": {
                 "interval_seconds": self.interval_seconds,
                 "scenario_suffix": self.scenario_suffix,
                 "output_dir": str(self.output_dir),
+                "cpu_count": self._cpu_count,
             },
             "timing": {
                 "start_time": self._start_time,
                 "end_time": self._end_time,
-                "duration_seconds": (self._end_time or 0) - (self._start_time or 0),
+                "duration_seconds": duration,
             },
             "samples": {
-                "count": len(self._samples),
-                "first_timestamp": self._samples[0]["timestamp"],
-                "last_timestamp": self._samples[-1]["timestamp"],
+                "count": len(samples),
+                "first_timestamp": samples[0]["timestamp"],
+                "last_timestamp": samples[-1]["timestamp"],
             },
             "metrics": {},
         }
 
-        # Calculate statistics for each numeric metric
-        numeric_fields = self._get_numeric_fields()
         metrics_dict: dict[str, dict[str, float]] = {}
-        for field in numeric_fields:
-            values = [
-                s[field] for s in self._samples if field in s and s[field] is not None
-            ]
+        for field in self._get_numeric_fields(samples):
+            values = [s[field] for s in samples if field in s and s[field] is not None]
             if values:
                 metrics_dict[field] = self._calculate_stats(values)
         summary["metrics"] = metrics_dict
 
+        # Totals are the tail of the cumulative series, not an average.
+        summary["totals"] = {
+            "read_mb": samples[-1].get("read_mb", 0.0),
+            "write_mb": samples[-1].get("write_mb", 0.0),
+            "peak_memory_mb": max(s.get("memory_mb", 0.0) for s in samples),
+        }
+
         return summary
 
-    def _get_numeric_fields(self) -> list[str]:
+    def _get_numeric_fields(self, samples: list[dict[str, Any]]) -> list[str]:
         """Get list of numeric field names from samples."""
-        if not self._samples:
+        if not samples:
             return []
 
-        numeric_fields = []
-        for key, value in self._samples[0].items():
-            if key in ["timestamp", "relative_time"]:
-                continue
-            if isinstance(value, int | float):
-                numeric_fields.append(key)
-
-        return numeric_fields
+        return [
+            key
+            for key, value in samples[0].items()
+            if key not in ("timestamp", "relative_time")
+            and isinstance(value, int | float)
+        ]
 
     def _calculate_stats(self, values: list[int | float]) -> dict[str, float]:
         """Calculate min, max, mean, and percentiles for a list of values."""
@@ -349,7 +567,6 @@ class PerformanceMonitor:
             "count": n,
         }
 
-        # Percentiles
         if n >= 2:
             stats["p50"] = self._percentile(values, 0.5)
             stats["p90"] = self._percentile(values, 0.9)
@@ -365,40 +582,34 @@ class PerformanceMonitor:
         index = p * (len(values) - 1)
         if index.is_integer():
             return float(values[int(index)])
-        else:
-            lower = int(index)
-            upper = lower + 1
-            weight = index - lower
-            return float(values[lower] * (1 - weight) + values[upper] * weight)
+        lower = int(index)
+        upper = lower + 1
+        weight = index - lower
+        return float(values[lower] * (1 - weight) + values[upper] * weight)
 
     def _write_metrics_csv(self) -> None:
-        """Write time series metrics to CSV file."""
-        if not self._samples:
+        """Write time series metrics to CSV using the canonical column order."""
+        with self._lock:
+            samples = list(self._samples)
+
+        if not samples:
             logger.warning("No samples to write to CSV")
             return
 
         try:
-            # Ensure output directory exists
             self.output_dir.mkdir(parents=True, exist_ok=True)
-
-            # Get all possible field names
-            all_fields: set[str] = set()
-            for sample in self._samples:
-                all_fields.update(sample.keys())
-
-            # Sort fields for consistent output
-            fieldnames = sorted(all_fields)
 
             with open(
                 self._metrics_csv_path, "w", newline="", encoding="utf-8"
             ) as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer = csv.DictWriter(
+                    csvfile, fieldnames=METRICS_FIELDNAMES, extrasaction="ignore"
+                )
                 writer.writeheader()
-                writer.writerows(self._samples)
+                for sample in samples:
+                    writer.writerow({k: sample.get(k, 0) for k in METRICS_FIELDNAMES})
 
-            logger.info(
-                f"Wrote {len(self._samples)} samples to {self._metrics_csv_path}"
-            )
+            logger.info(f"Wrote {len(samples)} samples to {self._metrics_csv_path}")
 
         except Exception:
             logger.exception("Failed to write metrics CSV")
@@ -406,7 +617,6 @@ class PerformanceMonitor:
     def _write_summary_json(self, summary: dict[str, Any]) -> None:
         """Write summary statistics to JSON file."""
         try:
-            # Ensure output directory exists
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
             with open(self._summary_json_path, "w", encoding="utf-8") as jsonfile:
@@ -416,6 +626,10 @@ class PerformanceMonitor:
 
         except Exception:
             logger.exception("Failed to write summary JSON")
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
 
     @property
     def metrics_csv_path(self) -> Path:
@@ -435,7 +649,8 @@ class PerformanceMonitor:
     @property
     def sample_count(self) -> int:
         """Number of samples collected so far."""
-        return len(self._samples)
+        with self._lock:
+            return len(self._samples)
 
 
 def create_monitor(
@@ -472,15 +687,18 @@ def create_monitor(
         return None
 
 
-# Context manager for convenient monitoring
 class MonitoredOperation:
     """
     Context manager for monitoring operations.
 
+    When ``enabled`` is False the context manager is inert: no monitor is created
+    and no metrics files are written.
+
     Example:
         with MonitoredOperation(output_dir="./metrics") as monitor:
-            # ... run expensive operation ...
-            pass
+            proc = subprocess.Popen(...)
+            monitor.attach_process(proc.pid)
+            proc.wait()
         # Metrics are automatically saved
     """
 
@@ -490,9 +708,15 @@ class MonitoredOperation:
         output_dir: str | Path | None = None,
         scenario_suffix: str = "",
         process_pid: int | None = None,
+        enabled: bool = True,
     ):
         """Initialize monitored operation context."""
-        self.monitor = create_monitor(interval_seconds, output_dir, scenario_suffix)
+        self.enabled = enabled
+        self.monitor = (
+            create_monitor(interval_seconds, output_dir, scenario_suffix)
+            if enabled
+            else None
+        )
         self.process_pid = process_pid
         self.summary: dict[str, Any] = {}
 

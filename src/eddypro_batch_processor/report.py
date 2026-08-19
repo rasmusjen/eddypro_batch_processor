@@ -9,7 +9,9 @@ import csv
 import hashlib
 import json
 import logging
+import os
 import platform
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +35,95 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError:
     logger.debug("Plotly not available; charts will fall back to SVG or none")
+
+
+#: Bumped when the run manifest structure changes in a way consumers must notice.
+MANIFEST_SCHEMA_VERSION = 2
+
+
+def compute_config_checksum(config: dict[str, Any]) -> str:
+    """
+    Compute a stable SHA256 checksum of a configuration mapping.
+
+    Replaces the previous ``str(hash(json.dumps(...)))``, which used Python's
+    built-in ``hash()``. That is salted per-process by ``PYTHONHASHSEED``, so the
+    same configuration produced a different checksum on every run, making the
+    field useless for comparing runs.
+    """
+    canonical = json.dumps(config, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def get_git_provenance(repo_root: Path | None = None) -> dict[str, Any]:
+    """
+    Capture the git commit the code was run from.
+
+    Degrades gracefully: outside a git repository, or without git installed, the
+    fields are simply reported as unavailable rather than raising.
+    """
+    cwd = repo_root or Path(__file__).resolve().parent
+    info: dict[str, Any] = {"git_sha": None, "git_dirty": None, "git_branch": None}
+    try:
+        info["git_sha"] = subprocess.check_output(  # nosec B603 B607
+            ["git", "rev-parse", "HEAD"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        info["git_branch"] = subprocess.check_output(  # nosec B603 B607
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        status = subprocess.check_output(  # nosec B603 B607
+            ["git", "status", "--porcelain"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        info["git_dirty"] = bool(status.strip())
+    except Exception:
+        logger.debug("Git provenance unavailable")
+    return info
+
+
+def get_provenance(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    Assemble the reproducibility block recorded in the run manifest.
+
+    Captures the tool version, git state, the invoking command line, and the
+    EddyPro executable actually used (path plus checksum, so a silent upgrade of
+    the binary is detectable after the fact).
+    """
+    # Imported lazily: the package __init__ imports core, which imports this
+    # module, so a top-level import here would be circular.
+    from . import __version__  # noqa: PLC0415
+
+    provenance: dict[str, Any] = {
+        "tool_version": __version__,
+        "command_line": list(sys.argv),
+        **get_git_provenance(),
+    }
+
+    exe = config.get("eddypro_executable")
+    eddypro: dict[str, Any] = {"path": str(exe) if exe else None, "checksum": None}
+    if exe:
+        try:
+            exe_path = Path(exe)
+            if exe_path.exists():
+                eddypro["checksum"] = compute_file_checksum(exe_path)
+                # EddyPro embeds its version in the install directory name,
+                # e.g. .../EddyPro-7.0.9/bin/eddypro_rp.exe
+                for part in exe_path.parts:
+                    if part.lower().startswith("eddypro-"):
+                        eddypro["version"] = part.split("-", 1)[1]
+                        break
+        except Exception:
+            logger.debug("Could not checksum EddyPro executable")
+    provenance["eddypro"] = eddypro
+
+    return provenance
 
 
 def compute_file_checksum(file_path: Path, algorithm: str = "sha256") -> str:
@@ -222,6 +313,10 @@ def generate_run_manifest(
     overall_success: bool,
     output_dirs: list[Path],
     provenance: dict[str, Any] | None = None,
+    years: list[dict[str, Any]] | None = None,
+    errors: list[str] | None = None,
+    status: str = "completed",
+    metrics_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Generate a run-level manifest capturing all scenarios and metadata.
@@ -229,15 +324,23 @@ def generate_run_manifest(
     Args:
         run_id: Unique identifier for this run
         config: Configuration dictionary used for the run
-        config_checksum: Checksum of the config file
+        config_checksum: Stable SHA256 checksum of the config
         site_id: Site identifier
-        years_processed: List of years processed
+        years_processed: Years that completed successfully (derived, kept for
+            backwards compatibility -- prefer ``years`` for full detail)
         scenarios: List of scenario manifests
         start_time: Run start timestamp
         end_time: Run end timestamp
         overall_success: Whether all scenarios succeeded
         output_dirs: List of output directories created
-        provenance: Optional provenance information (git SHA, etc.)
+        provenance: Provenance information (git SHA, tool version, EddyPro build)
+        years: Per-year records ``{year, status, duration_seconds, error,
+            output_dir}``. A failed year appears here even though it is absent
+            from ``years_processed``.
+        errors: Run-level error messages
+        status: ``"running"`` for the manifest written at run start, then
+            ``"completed"`` or ``"failed"``
+        metrics_summary: Bottleneck analysis and performance summary
 
     Returns:
         Dictionary containing run manifest data
@@ -252,44 +355,80 @@ def generate_run_manifest(
             output_files[str(output_dir)] = collected
 
     manifest = {
+        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
         "run_id": run_id,
+        "status": status,
         "timestamp": start_time.isoformat(),
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
         "duration_seconds": duration_seconds,
         "site_id": site_id,
         "years_processed": years_processed,
+        "years": years if years is not None else [],
         "config_checksum": config_checksum,
         "config_snapshot": config,  # Include full config for reproducibility
         "overall_success": overall_success,
         "scenarios": scenarios,
+        "errors": errors if errors is not None else [],
         "output_dirs": [str(d) for d in output_dirs],
-        "output_files": output_files,  # New: detailed file inventory
+        "output_files": output_files,  # Detailed file inventory
         "environment": get_python_environment_info(),
         "dry_run": config.get("dry_run", False),  # Track if this was a dry run
     }
 
     if provenance:
         manifest["provenance"] = provenance
+    if metrics_summary:
+        manifest["metrics_summary"] = metrics_summary
 
     return manifest
 
 
-def write_run_manifest(manifest: dict[str, Any], output_path: Path) -> None:
+def write_run_manifest(manifest: dict[str, Any], output_path: Path) -> bool:
     """
-    Write run manifest to JSON file.
+    Write the run manifest to JSON atomically.
+
+    The manifest is serialised to a temporary file in the destination directory
+    and then moved into place with :func:`os.replace`. Writing directly to the
+    destination meant that a crash mid-write destroyed the previous good manifest
+    and left invalid JSON behind.
+
+    A copy is also archived under ``manifests/run_manifest_{run_id}.json`` so that
+    consecutive runs against the same output tree do not erase each other's
+    provenance.
 
     Args:
         manifest: Run manifest dictionary
         output_path: Path to write manifest JSON
+
+    Returns:
+        True if the manifest was written successfully.
     """
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with output_path.open("w") as f:
-            json.dump(manifest, f, indent=2)
+        tmp_path = output_path.with_name(output_path.name + ".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, default=str)
+        os.replace(tmp_path, output_path)
         logger.info(f"Run manifest written to {output_path}")
     except Exception:
         logger.exception(f"Failed to write run manifest to {output_path}")
+        return False
+
+    # Archive a per-run copy. Failure here is not fatal: the canonical manifest
+    # is already safely in place.
+    try:
+        run_id = manifest.get("run_id")
+        if run_id:
+            archive_dir = output_path.parent / "manifests"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            archive_path = archive_dir / f"run_manifest_{run_id}.json"
+            with archive_path.open("w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2, default=str)
+    except Exception:
+        logger.debug("Could not archive per-run manifest copy")
+
+    return True
 
 
 def load_metrics_from_csv(metrics_csv_path: Path) -> list[dict[str, Any]]:
@@ -306,15 +445,31 @@ def load_metrics_from_csv(metrics_csv_path: Path) -> list[dict[str, Any]]:
     try:
         with metrics_csv_path.open("r") as f:
             reader = csv.DictReader(f)
+            numeric_fields = (
+                "cpu_percent",
+                "memory_mb",
+                "read_mb",
+                "write_mb",
+                "read_mb_per_s",
+                "write_mb_per_s",
+                "read_iops",
+                "write_iops",
+                "relative_time",
+                "system_cpu_percent",
+                "system_memory_percent",
+            )
             for row in reader:
-                # Convert numeric fields
-                try:
-                    row["cpu_percent"] = float(row.get("cpu_percent", 0))
-                    row["memory_mb"] = float(row.get("memory_mb", 0))
-                    row["read_mb"] = float(row.get("read_mb", 0))
-                    row["write_mb"] = float(row.get("write_mb", 0))
-                except (ValueError, KeyError):
-                    pass
+                # Coerce per field rather than in one block: a single blank cell
+                # must not abandon the remaining conversions for that row.
+                for name in numeric_fields:
+                    if name not in row:
+                        continue
+                    try:
+                        row[name] = (
+                            float(row[name]) if row[name] not in ("", None) else 0.0
+                        )
+                    except (TypeError, ValueError):
+                        row[name] = 0.0
                 metrics.append(row)
     except Exception:
         logger.warning(f"Failed to load metrics from {metrics_csv_path}")
@@ -448,8 +603,7 @@ def generate_html_report(
     html_parts = []
 
     # HTML header
-    html_parts.append(
-        """
+    html_parts.append("""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -512,8 +666,7 @@ def generate_html_report(
 </head>
 <body>
     <div class="container">
-"""
-    )
+""")
 
     # Report title and summary
     run_id = run_manifest.get("run_id", "unknown")
@@ -525,8 +678,7 @@ def generate_html_report(
     status_class = "success" if overall_success else "failure"
     status_text = "SUCCESS" if overall_success else "FAILURE"
 
-    html_parts.append(
-        f"""
+    html_parts.append(f"""
         <h1>EddyPro Batch Processing Report</h1>
         <div class="summary-box">
             <h2>Run Summary</h2>
@@ -537,14 +689,82 @@ def generate_html_report(
             <p><strong>Years Processed:</strong> {", ".join(map(str, years))}</p>
             <p><strong>Overall Status:</strong> <span class="{status_class}">{status_text}</span></p>
         </div>
-"""
-    )
+""")
+
+    # Performance health check: traffic-light bottleneck summary. Placed directly
+    # under the run summary because it is the first thing a user wants to know.
+    metrics_summary = run_manifest.get("metrics_summary") or {}
+    perf_entries = metrics_summary.get("scenarios", [])
+    if perf_entries:
+        colours = {
+            "RED": "#e74c3c",
+            "YELLOW": "#f39c12",
+            "GREEN": "#27ae60",
+            "UNKNOWN": "#95a5a6",
+        }
+
+        def _dot(status: str) -> str:
+            colour = colours.get(status, colours["UNKNOWN"])
+            return (
+                f'<span style="display:inline-block;width:12px;height:12px;'
+                f'border-radius:50%;background:{colour};margin-right:6px;"></span>'
+                f"{status}"
+            )
+
+        html_parts.append(f"""
+        <h2>Performance Health Check</h2>
+        <p><strong>Primary bottleneck:</strong>
+           {metrics_summary.get("primary_bottleneck", "UNKNOWN")}</p>
+        <table>
+            <tr>
+                <th>Run</th><th>CPU</th><th>Memory</th><th>Disk</th>
+                <th>Bottleneck</th><th>CPU p95</th><th>Peak RAM (MB)</th>
+                <th>Read (MB)</th><th>Write (MB)</th>
+            </tr>
+""")
+        for entry in perf_entries:
+            cpu = entry.get("cpu", {}) or {}
+            html_parts.append(f"""            <tr>
+                <td>{entry.get("scenario_name", "?")}</td>
+                <td>{_dot(entry.get("cpu_status", "UNKNOWN"))}</td>
+                <td>{_dot(entry.get("memory_status", "UNKNOWN"))}</td>
+                <td>{_dot(entry.get("disk_status", "UNKNOWN"))}</td>
+                <td><strong>{entry.get("primary_bottleneck", "?")}</strong></td>
+                <td>{cpu.get("p95", 0):.1f}%</td>
+                <td>{entry.get("peak_memory_mb", 0):.0f}</td>
+                <td>{entry.get("total_read_mb", 0):.0f}</td>
+                <td>{entry.get("total_write_mb", 0):.0f}</td>
+            </tr>
+""")
+        html_parts.append("        </table>\n")
+        for entry in perf_entries:
+            if entry.get("explanation"):
+                html_parts.append(
+                    f'        <p><em>{entry.get("scenario_name", "?")}:</em> '
+                    f'{entry["explanation"]}</p>\n'
+                )
+
+    # Per-year results, including years that failed
+    year_records = run_manifest.get("years", [])
+    if year_records:
+        html_parts.append("""
+        <h2>Per-Year Results</h2>
+        <table>
+            <tr><th>Year</th><th>Status</th><th>Duration (s)</th><th>Error</th></tr>
+""")
+        for rec in year_records:
+            html_parts.append(
+                f"            <tr><td>{rec.get('year', '?')}</td>"
+                f"<td>{rec.get('status', '?')}</td>"
+                f"<td>{rec.get('duration_seconds', 0):.1f}</td>"
+                f"<td>{rec.get('error') or ''}</td></tr>\n"
+            )
+        html_parts.append("        </table>\n")
 
     # Scenario summary table
     scenarios = run_manifest.get("scenarios", [])
     if scenarios:
-        html_parts.append(
-            """
+        html_parts.append("""
         <h2>Scenario Results</h2>
         <table>
             <tr>
@@ -553,8 +773,7 @@ def generate_html_report(
                 <th>Duration (s)</th>
                 <th>Status</th>
             </tr>
-"""
-        )
+""")
         for scenario in scenarios:
             name = scenario.get("scenario_name", "unknown")
             params = scenario.get("scenario_params", {})
@@ -564,16 +783,14 @@ def generate_html_report(
             status_class = "success" if success else "failure"
             status_text = "SUCCESS" if success else "FAILURE"
 
-            html_parts.append(
-                f"""
+            html_parts.append(f"""
             <tr>
                 <td>{name}</td>
                 <td>{params_str or "baseline"}</td>
                 <td>{duration_s:.2f}</td>
                 <td class="{status_class}">{status_text}</td>
             </tr>
-"""
-            )
+""")
         html_parts.append("        </table>\n")
 
     # Performance charts (if available and requested)
@@ -596,48 +813,40 @@ def generate_html_report(
 
     # Environment information
     env_info = run_manifest.get("environment", {})
-    html_parts.append(
-        f"""
+    html_parts.append(f"""
         <h2>Environment</h2>
         <div class="summary-box">
             <p><strong>Python Version:</strong> {env_info.get("python_version", "unknown")}</p>
             <p><strong>Platform:</strong> {env_info.get("platform", "unknown")}</p>
             <p><strong>Processor:</strong> {env_info.get("processor", "unknown")}</p>
         </div>
-"""
-    )
+""")
 
     package_versions = env_info.get("package_versions", {})
     if package_versions:
-        html_parts.append(
-            """
+        html_parts.append("""
         <h3>Package Versions</h3>
         <table>
             <tr>
                 <th>Package</th>
                 <th>Version</th>
             </tr>
-"""
-        )
+""")
         for pkg, version in package_versions.items():
-            html_parts.append(
-                f"""
+            html_parts.append(f"""
             <tr>
                 <td>{pkg}</td>
                 <td>{version}</td>
             </tr>
-"""
-            )
+""")
         html_parts.append("        </table>\n")
 
     # HTML footer
-    html_parts.append(
-        """
+    html_parts.append("""
     </div>
 </body>
 </html>
-"""
-    )
+""")
 
     html_content = "".join(html_parts)
 

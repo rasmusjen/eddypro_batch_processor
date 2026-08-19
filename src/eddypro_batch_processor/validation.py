@@ -81,6 +81,14 @@ def validate_config_structure(config: dict[str, Any]) -> list[str]:
             f"'max_processes' must be an integer, got {type(config['max_processes'])}"
         )
 
+    if "monitoring_enabled" in config and not isinstance(
+        config["monitoring_enabled"], bool
+    ):
+        errors.append(
+            f"'monitoring_enabled' must be a boolean, got "
+            f"{type(config['monitoring_enabled'])}"
+        )
+
     if "metrics_interval_seconds" in config and not isinstance(
         config["metrics_interval_seconds"], int | float
     ):
@@ -408,12 +416,14 @@ def validate_config_sanity(config: dict[str, Any]) -> list[str]:
                 f"enabled, got {max_proc}"
             )
 
-    # Check metrics_interval_seconds is positive
-    metrics_interval = config.get("metrics_interval_seconds", 0)
-    if metrics_interval <= 0:
-        errors.append(
-            f"'metrics_interval_seconds' must be positive, got {metrics_interval}"
-        )
+    # Check metrics_interval_seconds is positive. Only meaningful when monitoring
+    # is enabled -- a disabled monitor never reads the interval.
+    if config.get("monitoring_enabled", True):
+        metrics_interval = config.get("metrics_interval_seconds", 0)
+        if metrics_interval <= 0:
+            errors.append(
+                f"'metrics_interval_seconds' must be positive, got {metrics_interval}"
+            )
 
     return errors
 

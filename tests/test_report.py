@@ -1,12 +1,14 @@
 """Tests for the report module."""
 
+import csv
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from eddypro_batch_processor import report
+from eddypro_batch_processor.monitor import METRICS_FIELDNAMES
 
 
 def test_compute_file_checksum(tmp_path):
@@ -338,3 +340,111 @@ def test_generate_plotly_charts():
     # Test with empty metrics
     result = report.generate_plotly_charts([], scenario_name="test")
     assert result is None
+
+
+class TestPerformanceAndManifestV2:
+    """Regression cover for the manifest and report fixes."""
+
+    def test_config_checksum_is_stable_and_order_independent(self):
+        """The old str(hash(...)) was salted per process and useless."""
+        a = report.compute_config_checksum({"a": 1, "b": [2, 3]})
+        b = report.compute_config_checksum({"b": [2, 3], "a": 1})
+        assert a == b
+        assert len(a) == 64  # sha256 hex
+
+    def test_manifest_has_schema_version_and_year_records(self, tmp_path):
+        now = datetime.now(timezone.utc)
+        manifest = report.generate_run_manifest(
+            run_id="r1",
+            config={"x": 1},
+            config_checksum="abc",
+            site_id="S",
+            years_processed=[2021],
+            scenarios=[],
+            start_time=now,
+            end_time=now,
+            overall_success=False,
+            output_dirs=[],
+            years=[
+                {"year": 2021, "status": "success", "error": None},
+                {"year": 2022, "status": "failed", "error": "boom"},
+            ],
+            errors=["2022: boom"],
+            status="failed",
+        )
+        assert manifest["manifest_schema_version"] == 2
+        assert manifest["status"] == "failed"
+        # A failed year must remain visible even though it is absent from
+        # years_processed.
+        assert [y["year"] for y in manifest["years"]] == [2021, 2022]
+        assert manifest["errors"] == ["2022: boom"]
+        assert "+00:00" in manifest["start_time"]
+
+    def test_manifest_write_is_atomic_and_archived(self, tmp_path):
+        out = tmp_path / "reports" / "run_manifest.json"
+        ok = report.write_run_manifest({"run_id": "abc", "v": 1}, out)
+        assert ok is True
+        assert out.exists()
+        assert json.loads(out.read_text())["run_id"] == "abc"
+        # No temp file left behind
+        assert not list(out.parent.glob("*.tmp"))
+        # Per-run archive copy preserves prior provenance
+        assert (out.parent / "manifests" / "run_manifest_abc.json").exists()
+
+    def test_report_renders_traffic_light_table(self):
+        entry = {
+            "scenario_name": "2021_rp",
+            "cpu_status": "RED",
+            "memory_status": "GREEN",
+            "disk_status": "YELLOW",
+            "primary_bottleneck": "CPU",
+            "cpu": {"p95": 94.2},
+            "peak_memory_mb": 1234.0,
+            "total_read_mb": 500.0,
+            "total_write_mb": 250.0,
+            "explanation": "CPU saturated.",
+        }
+        html = report.generate_html_report(
+            run_manifest={
+                "run_id": "r",
+                "timestamp": "t",
+                "duration_seconds": 1.0,
+                "site_id": "S",
+                "years_processed": [2021],
+                "overall_success": True,
+                "environment": {},
+                "metrics_summary": {
+                    "scenarios": [entry],
+                    "primary_bottleneck": "CPU",
+                },
+            },
+            scenario_metrics=None,
+            chart_engine="none",
+        )
+        assert "Performance Health Check" in html
+        assert "94.2" in html
+        assert "CPU saturated." in html
+
+    def test_metrics_loader_reads_monitor_schema(self, tmp_path):
+        """The loader and the monitor must agree on column names."""
+        csv_path = tmp_path / "metrics.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=METRICS_FIELDNAMES)
+            w.writeheader()
+            w.writerow(
+                dict.fromkeys(METRICS_FIELDNAMES, 0)
+                | {
+                    "cpu_percent": 55.5,
+                    "memory_mb": 128.0,
+                    "read_mb": 10.0,
+                    "write_mb": 5.0,
+                }
+            )
+        rows = report.load_metrics_from_csv(csv_path)
+        assert len(rows) == 1
+        # These four are exactly what the chart generator reads; a mismatch here
+        # is what previously made every chart a flat zero line.
+        assert rows[0]["cpu_percent"] == 55.5
+        assert rows[0]["memory_mb"] == 128.0
+        assert rows[0]["read_mb"] == 10.0
+        assert rows[0]["write_mb"] == 5.0

@@ -7,9 +7,13 @@ This document describes the structure, location, and interpretation of reports g
 The batch processor generates comprehensive reports for each run, including:
 
 - Run manifests (machine-readable JSON)
-- HTML reports with interactive visualizations (for `run` executions)
+- HTML reports with interactive visualizations (for both `run` and
+  `scenarios`; `scenarios` additionally produces one aggregate comparison
+  report across all scenarios)
 - Per-scenario metrics and metadata
 - Performance time series data
+- A bottleneck classification (CPU / MEMORY / DISK_THROUGHPUT / DISK_IOPS)
+  for each run/scenario, based on the sampled metrics
 
 ## Report Location
 
@@ -55,21 +59,40 @@ eddypro-batch run --reports-dir /custom/reports
 ```json
 {
   "run_id": "GL-ZaF_20251002_100530",
-  "timestamp": "2025-10-02T10:05:30",
-  "start_time": "2025-10-02T10:05:30",
-  "end_time": "2025-10-02T11:20:15",
+  "manifest_schema_version": 2,
+  "status": "completed",
+  "timestamp": "2025-10-02T10:05:30+00:00",
+  "start_time": "2025-10-02T10:05:30+00:00",
+  "end_time": "2025-10-02T11:20:15+00:00",
   "duration_seconds": 4485.2,
   "site_id": "GL-ZaF",
   "years_processed": [2021, 2022],
-  "config_checksum": "a1b2c3d4",
+  "years": [
+    {
+      "year": 2021,
+      "status": "success",
+      "duration_seconds": 2240.1,
+      "error": null,
+      "output_dir": "/path/to/output/2021"
+    },
+    {
+      "year": 2022,
+      "status": "failed",
+      "duration_seconds": 12.4,
+      "error": "ECMD file not found for site GL-ZaF: ...",
+      "output_dir": "/path/to/output/2022"
+    }
+  ],
+  "config_checksum": "6c3e...sha256-of-canonical-config-json",
+  "config_file_checksum": "a91f...sha256-of-config-yaml-file",
   "config_snapshot": {"...": "..."},
-  "overall_success": true,
+  "overall_success": false,
   "scenarios": [
     {
       "scenario_name": "baseline",
       "scenario_params": {},
-      "start_time": "2025-10-02T10:05:30",
-      "end_time": "2025-10-02T11:20:15",
+      "start_time": "2025-10-02T10:05:30+00:00",
+      "end_time": "2025-10-02T11:20:15+00:00",
       "duration_seconds": 4485.2,
       "success": true
     }
@@ -93,9 +116,22 @@ eddypro-batch run --reports-dir /custom/reports
       "plotly": "5.22.0"
     }
   },
+  "provenance": {
+    "git_sha": "d34dbeef...",
+    "git_dirty": false,
+    "package_version": "0.3.0",
+    "eddypro_executable": "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe",
+    "eddypro_executable_checksum": "9f1c...sha256-of-eddypro_rp.exe",
+    "argv": ["eddypro-batch", "run", "--site", "GL-ZaF", "--years", "2021", "2022"]
+  },
   "dry_run": false
 }
 ```
+
+The manifest is written **atomically** (to a temp file, then renamed into
+place) at the start of the run with `status: "running"`, and rewritten with
+the final `status` and all other fields when the run ends — including when
+every year fails, so a manifest always exists after a run is attempted.
 
 ---
 
@@ -193,7 +229,18 @@ timestamp,relative_time,system_cpu_percent,system_memory_total,system_memory_ava
 - `process_io_read_bytes`, `process_io_write_bytes`, `process_io_read_count`, `process_io_write_count`
 
 Column presence can vary by platform and psutil capabilities. The CSV is a raw
-time series; summary statistics are written to `metrics_summary{suffix}.json`.
+time series; summary statistics are written to `metrics_summary{suffix}.json`,
+including derived disk rates (`read_mb_per_s`, `write_mb_per_s`) and the
+CPU/MEMORY/DISK_THROUGHPUT/DISK_IOPS bottleneck classification shown in the
+HTML report.
+
+**Note:** Metrics sample the whole EddyPro process tree (not just the
+`cmd.exe`/shell wrapper that launches it), so CPU and disk figures reflect
+actual EddyPro resource usage.
+
+If `monitoring_enabled: false` (or `--no-monitor`), none of these files are
+written and `metrics_interval_seconds` is ignored. See
+[CONFIG.md](CONFIG.md#monitoring_enabled).
 
 ---
 
@@ -263,32 +310,43 @@ Throughput: 3.2 scenarios/hour
 
 ## Provenance & Reproducibility
 
-### Config Hash
+### Config Checksums
 
-**Purpose:** Unique identifier for configuration state
+**Purpose:** Detect configuration changes between runs
 
-**Generation:** SHA256 hash of config file content (excluding comments/whitespace)
+**Generation:** Two independent SHA256 checksums are recorded:
+- `config_checksum` – SHA256 of the canonicalised config as JSON
+  (`json.dumps(config, sort_keys=True)`), so key ordering in the YAML file
+  doesn't matter
+- `config_file_checksum` – SHA256 of the raw `config.yaml` file content
 
 **Use:**
 - Compare runs to detect config changes
-- Link outputs to exact configuration used
+- Link outputs to the exact configuration used
 
-### Git SHA
+### Provenance Block
 
-**Purpose:** Link reports to source code version
+**Purpose:** Link reports to the exact code, executable, and invocation used
 
-**Captured:** Git commit hash at runtime (if repository available)
+**Captured (under `provenance` in the manifest):**
+- `git_sha` and `git_dirty` – commit hash and whether the working tree had
+  uncommitted changes at runtime (when run from a git checkout)
+- `package_version` – installed `eddypro-batch-processor` package version
+- `eddypro_executable` and `eddypro_executable_checksum` – path and SHA256
+  of the EddyPro executable used
+- `argv` – the exact command-line invocation (`sys.argv`)
+
+**Not captured:** input raw-data file checksums are not recorded.
 
 **Use:**
-- Reproduce results with specific code version
-- Track code changes between runs
+- Reproduce results with a specific code version and EddyPro build
+- Track code and executable changes between runs
 
 ### Environment Snapshot
 
-**Captured:**
+**Captured (under `environment`):**
 - Python version
 - Package versions (psutil, plotly, yaml, etc.)
-- EddyPro version (if detectable)
 
 **Use:**
 - Reproduce results with identical environment
@@ -388,13 +446,15 @@ eddypro-batch run --metrics-interval 2.0  # Sample every 2 seconds
 **Symptom:** HTML report displays chart placeholders or errors
 
 **Possible Causes:**
-- Plotly not installed
+- Plotly not installed (the report still generates, with a "Plotly not
+  installed" note in place of each chart — there is no automatic fallback
+  to SVG)
 - Incompatible Plotly version
 - Browser JavaScript disabled
 
 **Solutions:**
 - Install Plotly: `pip install plotly`
-- Use SVG fallback: `--report-charts svg`
+- Or explicitly select the SVG engine: `--report-charts svg`
 - Update browser or enable JavaScript
 
 ### Large Metrics Files
@@ -413,5 +473,6 @@ eddypro-batch run --metrics-interval 2.0  # Sample every 2 seconds
 ## See Also
 
 - [USAGE.md](USAGE.md) – CLI usage and examples
+- [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) – Worked multi-year run example, including how to read the bottleneck table
 - [SCENARIOS.md](SCENARIOS.md) – Scenario matrix runs
 - [CONFIG.md](CONFIG.md) – Configuration options

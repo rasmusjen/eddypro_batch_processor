@@ -1,65 +1,37 @@
 # Configuration for EddyPro processing job
+#
+# This file is the single source of truth for the full set of configuration
+# keys accepted by eddypro-batch. Copy it to config/config.yaml and edit the
+# values for your site. See docs/CONFIG.md for the full reference and
+# docs/MULTI_YEAR_RUNS.md for a worked multi-year example.
 
-# Specify the path to the EddyPro executable
+# Specify the path to the EddyPro executable (eddypro_rp.exe on Windows)
 eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
 
 # Specify the site ID you want to process
-#site_id: GL-ZaF
-#site_id: GL-ZaH
-#site_id: GL-Dsk
 site_id: GL-NuF
-#site_id: GL-NuH
 
 # List of years you want to process for this site
 years_to_process:
-
-  #- 2000
-  #- 2001
-  #- 2002
-  #- 2003
-  #- 2004
-  #- 2005
-  #- 2016
-  #- 2007
-  #- 2008
-  #- 2009
-  #- 2010
-  #- 2011
-  #- 2012
-  #- 2013
-  #- 2014
-  #- 2015
-  #- 2016
-  #- 2017
-  #- 2018
-  #- 2019
-  #- 2020
-  #- 2021
-  #- 2022
-  #- 2023
   - 2024
 
 # Input directory pattern for each year and site
 # Use `{year}` and `{site_id}` as placeholders
-#input_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/raw/{site_id}/{year}"
-
 input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
 
 # Output directory pattern for each year and site
 # Use `{year}` and `{site_id}` as placeholders
-#output_dir_pattern: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/processed/{site_id}/{year}"
-
 output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux"
 
-# Path to the ECMD CSV file
-#ecmd_file: "C:/Users/au710242/Code/Python/eddypro_batch_processor/data/GL-ZaF_ecmd.csv"
+# Path to the ECMD CSV file (site instrument/metadata history)
 ecmd_file: "D:/L1_processed/{site_id}/ecmd/{site_id}_ecmd.csv"
 
-# Enable or disable multiprocessing
-multiprocessing: False  # Set to False to disable multiprocessing
+# Enable or disable multiprocessing across years (see docs/MULTI_YEAR_RUNS.md)
+multiprocessing: False  # Set to True to process years in parallel
 
-# Maximum number of CPU cores to use for multiprocessing
-max_processes: 16  # Adjust this number based on your requirements
+# Maximum number of worker processes when multiprocessing is enabled
+# Rule of thumb: one worker per year, bounded by physical cores and disk throughput
+max_processes: 16
 
 # Control output streaming (EddyPro subprocess outputs)
 stream_output: True  # Set to False to keep EddyPro output quiet
@@ -77,9 +49,26 @@ log_backup_count: 5
 # Capture EddyPro stdout/stderr in logs
 log_eddypro_output: true
 
-# Performance monitoring configuration
-metrics_interval_seconds: 0.5  # Sampling interval for performance monitoring
+# Enable or disable performance monitoring (CPU/memory/disk sampling).
+# When False, no metrics files are written and metrics_interval_seconds is
+# ignored. See docs/CONFIG.md and docs/MULTI_YEAR_RUNS.md.
+monitoring_enabled: true
+
+# Performance monitoring sampling interval in seconds (only used when
+# monitoring_enabled is true)
+metrics_interval_seconds: 0.5
+
+# Optional: tune how the bottleneck analyser classifies a run. Defaults assume a
+# mechanical disk; raise the disk limits substantially for NVMe. See
+# docs/CONFIG.md for the full table of keys and defaults.
+#performance_thresholds:
+#  cpu_high_percent: 90
+#  memory_high_percent: 85
+#  disk_high_mb_per_s: 100
 
 # Reporting configuration
 reports_dir: null  # Optional: Custom reports directory (default: {output_dir}/reports)
 report_charts: plotly  # Chart engine: plotly, svg, or none (default: plotly)
+
+# Optional: override the EddyPro project template
+project_template: null  # null = use config/EddyProProject_template.ini

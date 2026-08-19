@@ -148,7 +148,10 @@ class TestPerformanceMonitor:
         assert sample["relative_time"] == 0.0
         assert sample["system_cpu_percent"] == 50.0
         assert sample["system_memory_percent"] == 50.0
-        assert sample["system_disk_read_bytes"] == 1000000
+        # Raw since-boot counters are no longer emitted; rates are derived from
+        # deltas instead, and the first sample has no previous value to diff.
+        assert "system_disk_read_bytes" not in sample
+        assert sample["system_read_mb_per_s"] == 0.0
 
     @patch("time.time")
     def test_process_monitoring(self, mock_time, temp_dir, mock_psutil):
@@ -169,9 +172,12 @@ class TestPerformanceMonitor:
         # Collect sample with process metrics
         sample = monitor._collect_sample()
         assert sample is not None
-        assert "process_cpu_percent" in sample
-        assert "process_memory_rss" in sample
-        assert sample["process_cpu_percent"] == 25.0
+        # Canonical schema: the process tree is reported as cpu_percent (core
+        # normalised), cpu_percent_of_core (raw) and memory_mb.
+        assert "cpu_percent" in sample
+        assert "memory_mb" in sample
+        assert sample["memory_mb"] == 100.0
+        assert sample["num_processes"] == 1
 
     def test_process_not_found(self, temp_dir, mock_psutil):
         """Test handling of non-existent process."""
@@ -420,8 +426,9 @@ class TestFakeWorkload:
 
             # Verify deterministic values
             assert sample["system_cpu_percent"] == 42.0
-            assert sample["system_memory_total"] == 8589934592
-            assert sample["system_disk_read_bytes"] == 1048576
+            assert sample["system_memory_percent"] == 50.0
+            # 8 GiB total - 4 GiB available = 4096 MiB used
+            assert sample["system_memory_used_mb"] == 4096.0
 
 
 class TestErrorHandling:
@@ -487,8 +494,11 @@ class TestErrorHandling:
         sample = monitor._collect_sample()
         assert sample is not None
         assert "timestamp" in sample
-        # System metrics should be missing due to exceptions
-        assert "system_cpu_percent" not in sample
+        # The canonical schema is fixed-width: on failure the keys are still
+        # present but hold defaults, so the CSV never gains ragged columns.
+        assert sample["system_cpu_percent"] == 0.0
+        assert sample["system_memory_percent"] == 0.0
+        assert sample["cpu_percent"] == 0.0
 
     def test_thread_safety(self, temp_dir):
         """Test thread safety of monitoring operations."""

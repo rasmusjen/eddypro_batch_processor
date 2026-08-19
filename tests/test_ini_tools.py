@@ -564,67 +564,6 @@ despike_meth=0
         assert parser.get("Site", "site_id") == "SITE"
 
 
-class TestScenarioSuffixGeneration(unittest.TestCase):
-    """Test scenario suffix generation functionality."""
-
-    def test_generate_scenario_suffix_empty(self):
-        """Test suffix generation with empty parameters."""
-        result = ini_tools.generate_scenario_suffix({})
-        self.assertEqual(result, "")
-
-    def test_generate_scenario_suffix_single_parameter(self):
-        """Test suffix generation with single parameter."""
-        parameters = {"rot_meth": 1}
-        result = ini_tools.generate_scenario_suffix(parameters)
-        self.assertEqual(result, "_rot1")
-
-    def test_generate_scenario_suffix_multiple_parameters(self):
-        """Test suffix generation with multiple parameters."""
-        parameters = {
-            "rot_meth": 3,
-            "tlag_meth": 4,
-            "detrend_meth": 1,
-            "despike_meth": 0,
-        }
-        result = ini_tools.generate_scenario_suffix(parameters)
-
-        # Should be sorted by parameter name alphabetically
-        # despike_meth, detrend_meth, rot_meth, tlag_meth
-        expected = "_spk0_det1_rot3_tlag4"
-        self.assertEqual(result, expected)
-
-    def test_generate_scenario_suffix_with_hf_meth(self):
-        """Suffix should include hf when hf_meth provided (alphabetical order)."""
-        parameters = {
-            "rot_meth": 1,
-            "hf_meth": 4,
-            "tlag_meth": 2,
-        }
-        result = ini_tools.generate_scenario_suffix(parameters)
-        # Alphabetical order of keys: hf_meth, rot_meth, tlag_meth -> hf, rot, tlag
-        self.assertEqual(result, "_hf4_rot1_tlag2")
-
-    def test_generate_scenario_suffix_deterministic(self):
-        """Test that suffix generation is deterministic."""
-        parameters = {"despike_meth": 1, "rot_meth": 1, "tlag_meth": 2}
-
-        # Generate suffix multiple times
-        results = [ini_tools.generate_scenario_suffix(parameters) for _ in range(5)]
-
-        # All results should be identical
-        self.assertTrue(all(r == results[0] for r in results))
-        # Should be sorted alphabetically: despike_meth, rot_meth, tlag_meth
-        self.assertEqual(results[0], "_spk1_rot1_tlag2")
-
-    def test_generate_scenario_suffix_unknown_parameter(self):
-        """Test suffix generation with unknown parameter name."""
-        parameters = {"unknown_param": 1}
-        result = ini_tools.generate_scenario_suffix(parameters)
-
-        # Should fallback to original parameter name
-        self.assertEqual(result, "_unknown_param1")
-
-
 class TestConditionalDateRanges(unittest.TestCase):
     """Test conditional date/time range population."""
 

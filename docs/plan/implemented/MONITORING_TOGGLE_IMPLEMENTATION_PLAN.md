@@ -13,7 +13,7 @@ Add a way to disable performance monitoring via CLI and config while keeping cur
 
 ### 1) CLI wiring
 Update argument parsing and overrides in:
-- [src/eddypro_batch_processor/cli.py](src/eddypro_batch_processor/cli.py)
+- [src/eddypro_batch_processor/cli.py](../../../src/eddypro_batch_processor/cli.py)
 
 Tasks:
 - Add `--monitor` / `--no-monitor` flags to `run` command.
@@ -23,7 +23,7 @@ Tasks:
 
 ### 2) Config schema and validation
 Update validation rules in:
-- [src/eddypro_batch_processor/validation.py](src/eddypro_batch_processor/validation.py)
+- [src/eddypro_batch_processor/validation.py](../../../src/eddypro_batch_processor/validation.py)
 
 Tasks:
 - Include `monitoring_enabled` in required keys (or treat as optional with default).
@@ -32,8 +32,8 @@ Tasks:
 
 ### 3) Core execution path
 Update monitoring entry points in:
-- [src/eddypro_batch_processor/core.py](src/eddypro_batch_processor/core.py)
-- [src/eddypro_batch_processor/monitor.py](src/eddypro_batch_processor/monitor.py)
+- [src/eddypro_batch_processor/core.py](../../../src/eddypro_batch_processor/core.py)
+- [src/eddypro_batch_processor/monitor.py](../../../src/eddypro_batch_processor/monitor.py)
 
 Tasks:
 - Add `monitoring_enabled: bool` parameter to `run_subprocess_with_monitoring()`.
@@ -43,11 +43,11 @@ Tasks:
 
 ### 4) Tests
 Update or add tests in:
-- [tests/test_cli.py](tests/test_cli.py)
-- [tests/test_cli_functions.py](tests/test_cli_functions.py)
-- [tests/test_e2e_integration.py](tests/test_e2e_integration.py)
-- [tests/test_validation.py](tests/test_validation.py)
-- [tests/test_monitor.py](tests/test_monitor.py)
+- [tests/test_cli.py](../../../tests/test_cli.py)
+- [tests/test_cli_functions.py](../../../tests/test_cli_functions.py)
+- [tests/test_e2e_integration.py](../../../tests/test_e2e_integration.py)
+- [tests/test_validation.py](../../../tests/test_validation.py)
+- [tests/test_monitor.py](../../../tests/test_monitor.py)
 
 Test cases:
 - CLI flags set/clear `monitoring_enabled`.
@@ -57,11 +57,11 @@ Test cases:
 
 ### 5) Documentation updates
 Update:
-- [README.md](README.md)
-- [docs/USAGE.md](docs/USAGE.md)
-- [docs/CONFIG.md](docs/CONFIG.md)
-- [docs/REPORTING.md](docs/REPORTING.md)
-- [CHANGELOG.md](CHANGELOG.md)
+- [README.md](../../../README.md)
+- [docs/USAGE.md](../../../docs/USAGE.md)
+- [docs/CONFIG.md](../../../docs/CONFIG.md)
+- [docs/REPORTING.md](../../../docs/REPORTING.md)
+- [CHANGELOG.md](../../../CHANGELOG.md)
 
 Docs tasks:
 - Add config option `monitoring_enabled` with default and description.
@@ -71,24 +71,24 @@ Docs tasks:
 ## Detailed Implementation Steps
 
 1) **Add config key**
-- In [docs/CONFIG.md](docs/CONFIG.md), document:
+- In [docs/CONFIG.md](../../../docs/CONFIG.md), document:
   - `monitoring_enabled: true` (default).
   - If `false`, no metrics collected; `metrics_interval_seconds` ignored.
 
 2) **CLI additions**
-- In [src/eddypro_batch_processor/cli.py](src/eddypro_batch_processor/cli.py):
+- In [src/eddypro_batch_processor/cli.py](../../../src/eddypro_batch_processor/cli.py):
   - Add flags:
     - `--monitor` (enable monitoring)
     - `--no-monitor` (disable monitoring)
   - In config overrides, set `config["monitoring_enabled"]` accordingly.
 
 3) **Validation rules**
-- In [src/eddypro_batch_processor/validation.py](src/eddypro_batch_processor/validation.py):
+- In [src/eddypro_batch_processor/validation.py](../../../src/eddypro_batch_processor/validation.py):
   - Validate `monitoring_enabled` is bool.
   - If `monitoring_enabled` is `False`, skip positive check for `metrics_interval_seconds`.
 
 4) **Core runtime logic**
-- In [src/eddypro_batch_processor/core.py](src/eddypro_batch_processor/core.py):
+- In [src/eddypro_batch_processor/core.py](../../../src/eddypro_batch_processor/core.py):
   - Add parameter `monitoring_enabled: bool` to `run_subprocess_with_monitoring`.
   - If disabled, run subprocess without `MonitoredOperation`.
   - Ensure no metrics files emitted.
@@ -100,8 +100,8 @@ Docs tasks:
 
 6) **Docs + changelog**
 - Update CLI usage examples with `--no-monitor`.
-- Mention effect on reports/metrics in [docs/REPORTING.md](docs/REPORTING.md).
-- Add entry to [CHANGELOG.md](CHANGELOG.md) under `[Unreleased]`.
+- Mention effect on reports/metrics in [docs/REPORTING.md](../../../docs/REPORTING.md).
+- Add entry to [CHANGELOG.md](../../../CHANGELOG.md) under `[Unreleased]`.
 
 ## Acceptance Criteria
 - `eddypro-batch run --no-monitor` runs without creating metrics files.

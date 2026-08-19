@@ -12,58 +12,29 @@ Override with: `--config /path/to/config.yaml`
 
 ### Complete Example
 
+The full, authoritative example config lives at
+[`config/config.yaml.example`](../config/config.yaml.example) — copy it to
+`config/config.yaml` and edit it. A short excerpt:
+
 ```yaml
-# EddyPro executable path
 eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
-
-# Site identification
-site_id: GL-ZaF
-
-# Years to process
+site_id: GL-NuF
 years_to_process:
-  - 2021
-  - 2022
-  - 2023
-
-# Input directory pattern (use {year} and {site_id} placeholders)
+  - 2024
 input_dir_pattern: "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
-
-# Output directory pattern (use {year} and {site_id} placeholders)
 output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux"
-
-# ECMD (Extended Configuration Metadata) file path
 ecmd_file: "D:/L1_processed/{site_id}/ecmd/{site_id}_ecmd.csv"
-
-# Multiprocessing settings
 multiprocessing: False
 max_processes: 16
-
-# Output streaming (EddyPro subprocess outputs)
-stream_output: True
-
-# Logging level
-log_level: INFO
-
-# Optional log file path (null disables file logging)
-log_file: "logs/eddypro_processing.log"
-
-# Log rotation (bytes) and backup count (0 disables rotation)
-log_max_bytes: 10485760
-log_backup_count: 5
-
-# Capture EddyPro stdout/stderr in logs
-log_eddypro_output: true
-
-# Performance monitoring
+monitoring_enabled: true
 metrics_interval_seconds: 0.5
-
-# Reporting
-reports_dir: null  # null = use default ({output_dir}/reports)
-report_charts: plotly  # Options: plotly, svg, none
-
-# Optional: project template override
-project_template: null  # null = use config/EddyProProject_template.ini
+reports_dir: null
+report_charts: plotly
 ```
+
+For a fully worked multi-year example (same settings applied across several
+years), see [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) and
+[`examples/multi_year_config.yaml`](../examples/multi_year_config.yaml).
 
 ## Required Configuration Keys
 
@@ -79,8 +50,8 @@ The following keys **must** be present in your configuration file:
 | `ecmd_file` | str | Path to ECMD CSV file |
 | `stream_output` | bool | Enable/disable real-time output |
 | `log_level` | str | Logging level |
-| `multiprocessing` | bool | Enable/disable multiprocessing |
-| `max_processes` | int | Maximum number of processes |
+| `multiprocessing` | bool | Enable/disable multiprocessing across years |
+| `max_processes` | int | Maximum number of parallel worker processes |
 | `metrics_interval_seconds` | float | Performance monitoring interval |
 | `reports_dir` | str or null | Custom reports directory |
 | `report_charts` | str | Chart engine for reports |
@@ -94,6 +65,7 @@ The following keys **must** be present in your configuration file:
 | `log_max_bytes` | int or null | Max log file size in bytes before rotation (0 disables rotation) |
 | `log_backup_count` | int or null | Number of rotated log files to keep |
 | `log_eddypro_output` | bool | Write EddyPro stdout/stderr to logs |
+| `monitoring_enabled` | bool | Enable/disable performance monitoring (default: `true`) |
 
 ## Configuration Details
 
@@ -156,7 +128,9 @@ years_to_process:
 - Each item must be a valid integer (typically 4-digit year)
 
 **Notes:**
-- Years are processed sequentially (or in parallel if multiprocessing is enabled)
+- Years are processed in parallel (one worker per year, up to `max_processes`)
+  when `multiprocessing: true`; otherwise sequentially. See
+  [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) for a worked example.
 - Used in path placeholders (`{year}`)
 
 ---
@@ -264,8 +238,12 @@ multiprocessing: True
 - When enabled, `max_processes` must be positive
 
 **Notes:**
-- Multiprocessing settings are validated but not yet wired into execution.
-  The `run` and `scenarios` commands currently execute sequentially.
+- When `True`, the `run` command processes years in parallel across up to
+  `max_processes` worker processes (one worker per year). `scenarios`
+  processes years sequentially, running the full scenario batch for each
+  year before moving to the next.
+- Enable via CLI with `--mp` (and `--max-proc N`); see
+  [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md).
 
 ---
 
@@ -398,6 +376,70 @@ log_eddypro_output: true
 
 ---
 
+### monitoring_enabled
+
+**Type:** Boolean
+
+**Default:** `true`
+
+**Description:** Enable or disable performance monitoring (CPU, memory, and
+disk sampling of the EddyPro process tree) during processing.
+
+**Example:**
+```yaml
+monitoring_enabled: false
+```
+
+**Interaction with `metrics_interval_seconds`:**
+- When `true` (default), the monitor samples at `metrics_interval_seconds`
+  and writes `metrics_*.csv` files per year/scenario.
+- When `false`, no metrics files are written and `metrics_interval_seconds`
+  is ignored entirely — validation does not require it to be positive.
+
+**CLI Override:** `--monitor` / `--no-monitor` (available on both `run` and
+`scenarios`).
+
+---
+
+### performance_thresholds
+
+**Type:** Mapping (optional)
+
+**Default:** see table below
+
+**Description:** Tunes how the bottleneck analyser classifies a run. The
+defaults assume a mechanical disk; on NVMe storage the disk limits should be
+raised substantially or every run will be reported as disk-bound.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `cpu_high_percent` | 90 | At or above this sustained (p95) CPU, status is RED |
+| `cpu_moderate_percent` | 70 | At or above this, status is YELLOW |
+| `cpu_idle_percent` | 40 | Below this, a busy disk is read as the limiting factor |
+| `memory_high_percent` | 85 | System memory use that counts as RED |
+| `memory_moderate_percent` | 70 | System memory use that counts as YELLOW |
+| `disk_high_mb_per_s` | 100 | Combined read+write throughput counting as RED |
+| `disk_moderate_mb_per_s` | 50 | Throughput counting as YELLOW |
+| `disk_high_iops` | 1000 | Combined IOPS above which latency is the suspect |
+
+Unknown keys are ignored, so a config written for a newer version still loads.
+
+**Example (NVMe):**
+```yaml
+performance_thresholds:
+  disk_high_mb_per_s: 2000
+  disk_moderate_mb_per_s: 1000
+```
+
+**CLI Override:** none — config only.
+
+**Notes:**
+- Disable for maximum throughput on large batches where the small sampling
+  overhead matters, or when you no longer need per-run performance data. See
+  [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md).
+
+---
+
 ### metrics_interval_seconds
 
 **Type:** Float
@@ -462,9 +504,15 @@ report_charts: plotly
 ```
 
 **Fallback Behavior:**
-- If `plotly` is selected but not installed, automatically falls back to `svg` with a warning
+- If `plotly` is selected but the `plotly` package is not installed, the
+  report is still generated: chart sections show a
+  "Plotly not installed" note instead of a chart, and a debug-level log
+  message records the import failure. There is no automatic switch to `svg`.
+  Set `report_charts: svg` (or pass `--report-charts svg`) explicitly if you
+  don't have `plotly` installed.
 
-**Scope:** Currently used for HTML reports generated by the `run` command.
+**Scope:** Used for HTML reports generated by both `run` and `scenarios`
+(per-scenario reports plus one aggregate comparison report).
 
 **CLI Override:**
 ```bash
@@ -638,5 +686,6 @@ eddypro-batch validate && eddypro-batch run
 ## See Also
 
 - [USAGE.md](USAGE.md) – CLI usage and examples
+- [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) – Worked multi-year run example
 - [SCENARIOS.md](SCENARIOS.md) – Scenario matrix runs
 - [REPORTING.md](REPORTING.md) – Understanding reports

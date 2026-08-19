@@ -2,9 +2,9 @@
 
 ## Results (current behavior)
 
-- The .metadata file is currently created by copying a site-specific or generic template during scenario setup in [src/eddypro_batch_processor/core.py](src/eddypro_batch_processor/core.py).
-- The .eddypro file is written via the INI utilities in [src/eddypro_batch_processor/ini_tools.py](src/eddypro_batch_processor/ini_tools.py).
-- Dynamic metadata (.txt) is generated from the ECMD CSV in [src/eddypro_batch_processor/ecmd.py](src/eddypro_batch_processor/ecmd.py).
+- The .metadata file is currently created by copying a site-specific or generic template during scenario setup in [src/eddypro_batch_processor/core.py](../../../src/eddypro_batch_processor/core.py).
+- The .eddypro file is written via the INI utilities in [src/eddypro_batch_processor/ini_tools.py](../../../src/eddypro_batch_processor/ini_tools.py).
+- Dynamic metadata (.txt) is generated from the ECMD CSV in [src/eddypro_batch_processor/ecmd.py](../../../src/eddypro_batch_processor/ecmd.py).
 - There is no current logic that populates .metadata values from ECMD.
 
 ## Required behavior (per request)
@@ -49,7 +49,7 @@ Populate the following .metadata values based on ECMD input (column names on the
 
 ### 1. Add ECMD row selector utility
 
-Create a new function in [src/eddypro_batch_processor/ecmd.py](src/eddypro_batch_processor/ecmd.py) to load and select the ECMD row for a given site and year.
+Create a new function in [src/eddypro_batch_processor/ecmd.py](../../../src/eddypro_batch_processor/ecmd.py) to load and select the ECMD row for a given site and year.
 
 **Proposed behavior:**
 
@@ -66,7 +66,7 @@ Create a new function in [src/eddypro_batch_processor/ecmd.py](src/eddypro_batch
 
 ### 2. Add metadata patcher in ini_tools.py
 
-Add a function in [src/eddypro_batch_processor/ini_tools.py](src/eddypro_batch_processor/ini_tools.py) that:
+Add a function in [src/eddypro_batch_processor/ini_tools.py](../../../src/eddypro_batch_processor/ini_tools.py) that:
 
 - Reads the .metadata template (already copied into the scenario output dir).
 - Applies the static updates (`file_name`, `site_id`).
@@ -86,7 +86,7 @@ Update the flow so that .metadata population is invoked **after** the .eddypro f
 1. Writes the .eddypro file (existing `write_ini_file()` logic).
 2. Populates the .metadata file using the ECMD selector and patcher.
 
-This keeps the sequencing requirement (“inside ini_tools.py just after writing the .eddypro file”) while minimizing changes in the core orchestration in [src/eddypro_batch_processor/core.py](src/eddypro_batch_processor/core.py).
+This keeps the sequencing requirement (“inside ini_tools.py just after writing the .eddypro file”) while minimizing changes in the core orchestration in [src/eddypro_batch_processor/core.py](../../../src/eddypro_batch_processor/core.py).
 
 ### 4. Tests
 
@@ -97,14 +97,14 @@ Add unit tests for:
 - End-to-end scenario run in dry-run mode to ensure .metadata is populated.
 
 Likely locations:
-- [tests/test_ecmd.py](tests/test_ecmd.py) (new or existing)
-- [tests/test_ini_tools.py](tests/test_ini_tools.py)
-- [tests/test_e2e_integration.py](tests/test_e2e_integration.py)
+- [tests/test_ecmd.py](../../../tests/test_ecmd.py) (new or existing)
+- [tests/test_ini_tools.py](../../../tests/test_ini_tools.py)
+- [tests/test_e2e_integration.py](../../../tests/test_e2e_integration.py)
 
 ### 5. Documentation and changelog
 
-- Update [docs/CONFIG.md](docs/CONFIG.md) or [docs/SCENARIOS.md](docs/SCENARIOS.md) only if user-facing behavior needs to be documented.
-- Add an entry under **[Unreleased]** in [CHANGELOG.md](CHANGELOG.md).
+- Update [docs/CONFIG.md](../../../docs/CONFIG.md) or [docs/SCENARIOS.md](../../../docs/SCENARIOS.md) only if user-facing behavior needs to be documented.
+- Add an entry under **[Unreleased]** in [CHANGELOG.md](../../../CHANGELOG.md).
 
 ## Open questions (for confirmation)
 
