@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 EddyPro Batch Processor CLI.
 
@@ -9,14 +8,25 @@ and performance monitoring.
 import argparse
 import json
 import logging
+import os
 import shutil
 import sys
-from datetime import datetime
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
-from . import core, ecmd, ini_tools, report, scenarios, validation
+from . import (
+    __version__,
+    analysis,
+    core,
+    ecmd,
+    ini_tools,
+    report,
+    scenarios,
+    validation,
+)
 
 
 def setup_logging(
@@ -71,6 +81,12 @@ Examples:
     )
 
     # Global options
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"eddypro-batch {__version__}",
+        help="Show the installed package version and exit",
+    )
     parser.add_argument(
         "--config",
         type=str,
@@ -128,8 +144,22 @@ Examples:
     run_parser.add_argument(
         "--metrics-interval",
         type=float,
-        default=0.5,
-        help="Performance monitoring sampling interval in seconds (default: 0.5)",
+        default=None,
+        help="Performance monitoring sampling interval in seconds "
+        "(default: metrics_interval_seconds from config, or 0.5)",
+    )
+    run_parser.add_argument(
+        "--monitor",
+        dest="monitor",
+        action="store_true",
+        default=None,
+        help="Enable performance monitoring (overrides monitoring_enabled in config)",
+    )
+    run_parser.add_argument(
+        "--no-monitor",
+        dest="monitor",
+        action="store_false",
+        help="Disable performance monitoring; no metrics files are written",
     )
     run_parser.add_argument(
         "--reports-dir",
@@ -238,8 +268,27 @@ Examples:
     scenarios_parser.add_argument(
         "--metrics-interval",
         type=float,
-        default=0.5,
-        help="Performance monitoring sampling interval in seconds (default: 0.5)",
+        default=None,
+        help="Performance monitoring sampling interval in seconds "
+        "(default: metrics_interval_seconds from config, or 0.5)",
+    )
+    scenarios_parser.add_argument(
+        "--monitor",
+        dest="monitor",
+        action="store_true",
+        default=None,
+        help="Enable performance monitoring (overrides monitoring_enabled in config)",
+    )
+    scenarios_parser.add_argument(
+        "--no-monitor",
+        dest="monitor",
+        action="store_false",
+        help="Disable performance monitoring; no metrics files are written",
+    )
+    scenarios_parser.add_argument(
+        "--reports-dir",
+        type=str,
+        help="Custom reports directory (default: {output_dir}/reports)",
     )
 
     # Validate command
@@ -264,6 +313,214 @@ Examples:
     return parser
 
 
+def _raise_missing_ecmd(site: str, path: Path | None) -> NoReturn:
+    raise ecmd.ECMDError(f"ECMD file not found for site {site}: {path}")
+
+
+def _prepare_year_project(
+    *,
+    year: int,
+    site_id: str,
+    config: dict[str, Any],
+    template_path: Path,
+    ini_parameters: dict[str, int],
+    dry_run: bool,
+) -> Path:
+    """
+    Build the EddyPro project file for one year.
+
+    Returns:
+        Path to the generated ``.eddypro`` project file.
+
+    Raises:
+        Exception: Any failure to assemble the project, metadata, or inputs.
+    """
+    output_pattern = config["output_dir_pattern"]
+    output_dir = Path(output_pattern.format(year=year, site_id=site_id))
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    project_file = output_dir / f"{site_id}.eddypro"
+
+    ini_config = ini_tools.read_ini_template(template_path)
+    if ini_parameters:
+        validated_params = ini_tools.validate_parameters(ini_parameters)
+        ini_tools.patch_ini_parameters(ini_config, validated_params)
+
+    ecmd_file_pattern = config.get("ecmd_file", "")
+    if "{site_id}" in ecmd_file_pattern:
+        ecmd_file = Path(ecmd_file_pattern.format(site_id=site_id))
+    else:
+        ecmd_file = Path(ecmd_file_pattern)
+
+    # Materialize metadata files early (idempotent)
+    try:
+        # Copy generic metadata template -> {site}.metadata
+        # All sites use the same template; ECMD values populate it.
+        metadata_template = Path("config") / "metadata_template.ini"
+
+        if metadata_template.exists():
+            shutil.copyfile(metadata_template, output_dir / f"{site_id}.metadata")
+        else:
+            logging.warning(
+                f"No metadata template found for site {site_id}, "
+                "skipping .metadata file generation"
+            )
+
+        # Generate dynamic metadata from ECMD CSV (all years included)
+        dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
+        if ecmd_file.exists():
+            ecmd.generate_dynamic_metadata(
+                ecmd_path=ecmd_file,
+                output_path=output_dir / dyn_metadata_filename,
+                site_id=site_id,
+            )
+        else:
+            logging.warning(
+                f"ECMD file not found at {ecmd_file}, "
+                "skipping dynamic metadata generation"
+            )
+
+    except Exception as meta_err:
+        logging.warning(f"Failed to materialize metadata files: {meta_err}")
+
+    if not ecmd_file.exists():
+        _raise_missing_ecmd(site_id, ecmd_file)
+
+    ecmd_row = ecmd.select_ecmd_row_for_year(
+        ecmd_path=ecmd_file,
+        site_id=site_id,
+        year=year,
+    )
+
+    # Patch path fields; input path comes from the configured pattern
+    input_pattern = config.get("input_dir_pattern", "")
+    data_path_value = input_pattern.format(year=year, site_id=site_id)
+    ini_tools.patch_ini_paths(
+        ini_config,
+        site_id=site_id,
+        proj_file=str(output_dir / f"{site_id}.metadata"),
+        dyn_metadata_file=str(output_dir / f"{site_id}_dynamic_metadata.txt"),
+        data_path=data_path_value,
+        out_path=str(output_dir),
+    )
+
+    # Patch Project metadata fields (creation_date, project_title, etc.)
+    ini_tools.patch_project_metadata(
+        ini_config,
+        site_id=site_id,
+        year=year,
+        scenario_suffix="",
+    )
+
+    ini_tools.write_project_file_with_metadata(
+        ini_config,
+        project_file,
+        metadata_path=output_dir / f"{site_id}.metadata",
+        site_id=site_id,
+        output_dir=output_dir,
+        ecmd_row=ecmd_row,
+    )
+
+    logging.info(f"Created project file: {project_file}")
+
+    # Preflight validation: check data_path and file availability
+    if not dry_run:
+        ini_tools.validate_eddypro_inputs(ini_config)
+        ini_tools.validate_eddypro_metadata(ini_config)
+
+    return project_file
+
+
+def process_year(job: dict[str, Any]) -> dict[str, Any]:
+    """
+    Process a single year end to end.
+
+    Defined at module level and taking a plain dict so that it can be dispatched
+    to a :class:`~concurrent.futures.ProcessPoolExecutor` worker. Never raises:
+    every failure is captured into the returned record so that one bad year does
+    not abort the whole run and, crucially, remains visible in the run manifest.
+
+    Returns:
+        ``{year, status, duration_seconds, error, output_dir}`` where status is
+        one of ``"success"``, ``"failed"``, or ``"dry_run"``.
+    """
+    year = job["year"]
+    site_id = job["site_id"]
+    config = job["config"]
+    dry_run = job["dry_run"]
+
+    # Worker processes start with a bare logging config; re-establish it so that
+    # parallel years still write to the configured log file.
+    if job.get("configure_logging"):
+        setup_logging(
+            job.get("log_level", "INFO"),
+            config.get("log_file"),
+            config.get("log_max_bytes"),
+            config.get("log_backup_count"),
+        )
+
+    output_dir = Path(config["output_dir_pattern"].format(year=year, site_id=site_id))
+    started = datetime.now(timezone.utc)
+    record: dict[str, Any] = {
+        "year": year,
+        "status": "failed",
+        "duration_seconds": 0.0,
+        "error": None,
+        "output_dir": str(output_dir),
+    }
+
+    logging.info(f"Processing year {year} for site {site_id}")
+
+    try:
+        project_file = _prepare_year_project(
+            year=year,
+            site_id=site_id,
+            config=config,
+            template_path=Path(job["template_path"]),
+            ini_parameters=job["ini_parameters"],
+            dry_run=dry_run,
+        )
+    except Exception as exc:
+        logging.exception(f"Failed to prepare project file for year {year}")
+        record["error"] = str(exc)
+        record["duration_seconds"] = (
+            datetime.now(timezone.utc) - started
+        ).total_seconds()
+        return record
+
+    if dry_run:
+        logging.info(f"Dry run: skipped EddyPro execution for year {year}")
+        record["status"] = "dry_run"
+        record["duration_seconds"] = (
+            datetime.now(timezone.utc) - started
+        ).total_seconds()
+        return record
+
+    try:
+        success = core.run_eddypro_with_monitoring(
+            project_file=project_file,
+            eddypro_executable=Path(config["eddypro_executable"]),
+            stream_output=job["stream_output"],
+            metrics_interval=job["metrics_interval"],
+            scenario_suffix="",
+            log_output=job["log_eddypro_output"],
+            monitoring_enabled=job["monitoring_enabled"],
+        )
+    except Exception as exc:
+        logging.exception(f"EddyPro execution raised for year {year}")
+        record["error"] = str(exc)
+    else:
+        if success:
+            record["status"] = "success"
+            logging.info(f"EddyPro processing completed successfully for year {year}")
+        else:
+            record["error"] = "EddyPro returned a non-zero exit status"
+            logging.error(f"EddyPro processing failed for year {year}")
+
+    record["duration_seconds"] = (datetime.now(timezone.utc) - started).total_seconds()
+    return record
+
+
 def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
     """Execute the run command.
 
@@ -281,7 +538,7 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         Exit code (0 for success, 1 for failure)
     """
     logging.info("Starting EddyPro batch processing run...")
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
 
     # Load configuration
     config_path = Path(args.config)
@@ -340,8 +597,12 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         config["multiprocessing"] = True
     if getattr(args, "max_proc", None):
         config["max_processes"] = args.max_proc
-    if getattr(args, "metrics_interval", None):
+    # `is not None` matters: the parser default used to be 0.5, which is truthy,
+    # so metrics_interval_seconds from config.yaml was always silently overwritten.
+    if getattr(args, "metrics_interval", None) is not None:
         config["metrics_interval_seconds"] = args.metrics_interval
+    if getattr(args, "monitor", None) is not None:
+        config["monitoring_enabled"] = args.monitor
     if getattr(args, "reports_dir", None):
         config["reports_dir"] = args.reports_dir
     if getattr(args, "report_charts", None):
@@ -350,12 +611,19 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
     # Extract key settings
     site_id = config["site_id"]
     years = config["years_to_process"]
-    eddypro_exe = Path(config["eddypro_executable"])
+    # The executable is read from config inside process_year so that the job dict
+    # stays picklable for the ProcessPoolExecutor workers.
     stream_output = config.get("stream_output", True)
     log_eddypro_output = config.get("log_eddypro_output", True)
     metrics_interval = config.get("metrics_interval_seconds", 0.5)
+    monitoring_enabled = config.get("monitoring_enabled", True)
     dry_run = args.dry_run
     config["dry_run"] = dry_run  # Store in config for manifest
+
+    if not monitoring_enabled:
+        logging.info(
+            "Performance monitoring disabled; no metrics files will be written"
+        )
 
     if dry_run:
         logging.info("Dry run mode enabled - EddyPro will not be executed")
@@ -383,168 +651,109 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
             return 1
 
     # Process each year
-    overall_success = True
-    years_processed = []
+    use_mp = bool(config.get("multiprocessing", False))
+    max_processes = int(config.get("max_processes", 1) or 1)
+    # Never spin up more workers than there is work, or than the machine has cores.
+    worker_count = max(1, min(max_processes, len(years), os.cpu_count() or 1))
+    parallel = use_mp and worker_count > 1 and len(years) > 1
 
-    def _raise_missing_ecmd(site: str, path: Path | None) -> NoReturn:
-        raise ecmd.ECMDError(f"ECMD file not found for site {site}: {path}")
+    if use_mp and not parallel:
+        logging.info(
+            "Multiprocessing requested but only one worker is useful "
+            f"({len(years)} year(s), max_processes={max_processes}); "
+            "running sequentially"
+        )
 
-    for year in years:
-        logging.info(f"Processing year {year} for site {site_id}")
+    # Interleaved stdout from several concurrent EddyPro processes is unreadable,
+    # so streaming is suppressed when running in parallel. Output still reaches
+    # the log file when log_eddypro_output is enabled.
+    effective_stream_output = stream_output and not parallel
+    if parallel and stream_output:
+        logging.info(
+            "Output streaming disabled while running years in parallel; "
+            "EddyPro output is still captured in the log"
+        )
 
-        # Determine paths
-        output_pattern = config["output_dir_pattern"]
-        output_dir = Path(output_pattern.format(year=year, site_id=site_id))
+    jobs = [
+        {
+            "year": year,
+            "site_id": site_id,
+            "config": config,
+            "template_path": str(template_path),
+            "ini_parameters": ini_parameters,
+            "dry_run": dry_run,
+            "stream_output": effective_stream_output,
+            "metrics_interval": metrics_interval,
+            "log_eddypro_output": log_eddypro_output,
+            "monitoring_enabled": monitoring_enabled,
+            "configure_logging": parallel,
+            "log_level": getattr(args, "log_level", "INFO"),
+        }
+        for year in years
+    ]
 
-        # Create output directory
-        output_dir.mkdir(parents=True, exist_ok=True)
+    year_records: list[dict[str, Any]] = []
 
-        # Generate project file with parameter overrides and patched paths
-        project_file = output_dir / f"{site_id}.eddypro"
-        try:
-            ini_config = ini_tools.read_ini_template(template_path)
-            if ini_parameters:
-                validated_params = ini_tools.validate_parameters(ini_parameters)
-                ini_tools.patch_ini_parameters(ini_config, validated_params)
-
-            ecmd_file_pattern = config.get("ecmd_file", "")
-            if "{site_id}" in ecmd_file_pattern:
-                ecmd_file = Path(ecmd_file_pattern.format(site_id=site_id))
-            else:
-                ecmd_file = Path(ecmd_file_pattern)
-
-            # Materialize metadata files early (idempotent)
-            try:
-                # Copy generic metadata template -> {site}.metadata
-                # All sites use the same template; ECMD values populate it.
-                metadata_template = Path("config") / "metadata_template.ini"
-
-                if metadata_template.exists():
-                    shutil.copyfile(
-                        metadata_template, output_dir / f"{site_id}.metadata"
-                    )
-                else:
-                    logging.warning(
-                        f"No metadata template found for site {site_id}, "
-                        "skipping .metadata file generation"
-                    )
-
-                # Generate dynamic metadata from ECMD CSV (all years included)
-                dyn_metadata_filename = f"{site_id}_dynamic_metadata.txt"
-                if ecmd_file.exists():
-                    ecmd.generate_dynamic_metadata(
-                        ecmd_path=ecmd_file,
-                        output_path=output_dir / dyn_metadata_filename,
-                        site_id=site_id,
-                    )
-                else:
-                    logging.warning(
-                        f"ECMD file not found at {ecmd_file}, "
-                        "skipping dynamic metadata generation"
-                    )
-
-            except Exception as meta_err:
-                logging.warning(f"Failed to materialize metadata files: {meta_err}")
-
-            if not ecmd_file.exists():
-                _raise_missing_ecmd(site_id, ecmd_file)
-
-            ecmd_row = ecmd.select_ecmd_row_for_year(
-                ecmd_path=ecmd_file,
-                site_id=site_id,
-                year=year,
-            )
-
-            # Patch path fields
-            # Input path from configured pattern
-            input_pattern = config.get("input_dir_pattern", "")
-            data_path_value = input_pattern.format(year=year, site_id=site_id)
-            ini_tools.patch_ini_paths(
-                ini_config,
-                site_id=site_id,
-                proj_file=str(output_dir / f"{site_id}.metadata"),
-                dyn_metadata_file=str(output_dir / f"{site_id}_dynamic_metadata.txt"),
-                data_path=data_path_value,
-                out_path=str(output_dir),
-            )
-
-            # Patch Project metadata fields (creation_date, project_title, etc.)
-            ini_tools.patch_project_metadata(
-                ini_config,
-                site_id=site_id,
-                year=year,
-                scenario_suffix="",
-            )
-
-            ini_tools.write_project_file_with_metadata(
-                ini_config,
-                project_file,
-                metadata_path=output_dir / f"{site_id}.metadata",
-                site_id=site_id,
-                output_dir=output_dir,
-                ecmd_row=ecmd_row,
-            )
-
-            logging.info(f"Created project file: {project_file}")
-
-            # Preflight validation: check data_path and file availability
-            if not dry_run:
+    if parallel:
+        logging.info(
+            f"Processing {len(years)} years with {worker_count} parallel workers"
+        )
+        results_by_year: dict[int, dict[str, Any]] = {}
+        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            futures = {executor.submit(process_year, job): job["year"] for job in jobs}
+            for future in as_completed(futures):
+                year = futures[future]
                 try:
-                    ini_tools.validate_eddypro_inputs(ini_config)
-                    ini_tools.validate_eddypro_metadata(ini_config)
-                except ini_tools.INIParameterError:
-                    logging.exception(f"Preflight validation failed for year {year}")
-                    overall_success = False
-                    continue
+                    results_by_year[year] = future.result()
+                except Exception as exc:
+                    logging.exception(f"Worker for year {year} crashed")
+                    results_by_year[year] = {
+                        "year": year,
+                        "status": "failed",
+                        "duration_seconds": 0.0,
+                        "error": f"worker crashed: {exc}",
+                        "output_dir": str(
+                            Path(
+                                config["output_dir_pattern"].format(
+                                    year=year, site_id=site_id
+                                )
+                            )
+                        ),
+                    }
+        # Restore the requested order; completion order is nondeterministic.
+        year_records = [results_by_year[year] for year in years]
+    else:
+        year_records = [process_year(job) for job in jobs]
 
-        except Exception:
-            logging.exception("Failed to create project file")
-            overall_success = False
-            continue
-
-        # Execute EddyPro (or skip in dry-run mode)
-        if not dry_run:
-            success = core.run_eddypro_with_monitoring(
-                project_file=project_file,
-                eddypro_executable=eddypro_exe,
-                stream_output=stream_output,
-                metrics_interval=metrics_interval,
-                scenario_suffix="",
-                log_output=log_eddypro_output,
-            )
-
-            if not success:
-                logging.error(f"EddyPro processing failed for year {year}")
-                overall_success = False
-            else:
-                msg = f"EddyPro processing completed successfully for year {year}"
-                logging.info(msg)
-                years_processed.append(year)
-        else:
-            logging.info(f"Dry run: skipped EddyPro execution for year {year}")
-            years_processed.append(year)
-
-    end_time = datetime.now()
+    years_processed = [
+        r["year"] for r in year_records if r["status"] in ("success", "dry_run")
+    ]
+    run_errors = [f"{r['year']}: {r['error']}" for r in year_records if r.get("error")]
+    overall_success = all(r["status"] in ("success", "dry_run") for r in year_records)
+    end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
 
-    # Generate reports
-    if years_processed:
-        try:
-            output_pattern = config["output_dir_pattern"]
-            first_year_dir = output_pattern.format(year=years[0], site_id=site_id)
-            output_base = Path(first_year_dir)
-            core.generate_run_report(
-                config=config,
-                site_id=site_id,
-                years_processed=years_processed,
-                output_base_dir=output_base,
-                start_time=start_time,
-                end_time=end_time,
-                overall_success=overall_success,
-            )
-            logging.info("Reports generated successfully")
-        except Exception as e:
-            logging.warning(f"Failed to generate reports: {e}")
+    # Generate reports. This runs unconditionally: a run in which every year
+    # failed is exactly the run whose manifest matters most, and the old
+    # `if years_processed:` guard meant no record was written at all.
+    try:
+        output_pattern = config["output_dir_pattern"]
+        first_year_dir = output_pattern.format(year=years[0], site_id=site_id)
+        output_base = Path(first_year_dir)
+        core.generate_run_report(
+            config=config,
+            site_id=site_id,
+            years_processed=years_processed,
+            output_base_dir=output_base,
+            start_time=start_time,
+            end_time=end_time,
+            overall_success=overall_success,
+            year_records=year_records,
+            errors=run_errors,
+        )
+        logging.info("Reports generated successfully")
+    except Exception as e:
+        logging.warning(f"Failed to generate reports: {e}")
 
     # Final summary
     logging.info(f"Processing completed in {duration:.1f}s")
@@ -629,7 +838,21 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
     eddypro_exe = Path(config["eddypro_executable"])
     stream_output = config.get("stream_output", True)
     log_eddypro_output = config.get("log_eddypro_output", True)
-    metrics_interval = args.metrics_interval
+    # Honour config.yaml; the CLI flag only wins when explicitly supplied.
+    metrics_interval = (
+        args.metrics_interval
+        if args.metrics_interval is not None
+        else config.get("metrics_interval_seconds", 0.5)
+    )
+    monitoring_enabled = (
+        args.monitor
+        if getattr(args, "monitor", None) is not None
+        else config.get("monitoring_enabled", True)
+    )
+    if not monitoring_enabled:
+        logging.info(
+            "Performance monitoring disabled; no metrics files will be written"
+        )
 
     if not site_id:
         logging.error("Site ID not provided via CLI or config")
@@ -640,7 +863,7 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
         return 1
 
     # Process each year with all scenarios
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     all_scenario_results = []
 
     for year in years:
@@ -703,6 +926,7 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
             ecmd_file=ecmd_file_path,
             dry_run=hasattr(args, "dry_run") and args.dry_run,
             log_output=log_eddypro_output,
+            monitoring_enabled=monitoring_enabled,
         )
 
         # Collect results for reporting
@@ -713,7 +937,7 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
         failed = len(scenario_results) - successful
         logging.info(f"Year {year}: {successful} scenarios successful, {failed} failed")
 
-    end_time = datetime.now()
+    end_time = datetime.now(timezone.utc)
     duration = (end_time - start_time).total_seconds()
     logging.info(f"Scenario processing completed in {duration:.1f}s")
 
@@ -746,23 +970,108 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
                     if output_dir_path.exists():
                         output_dirs.append(output_dir_path)
 
-            # Compute config checksum
-            config_checksum = str(hash(json.dumps(config, sort_keys=True)))
+            # Stable SHA256; str(hash(...)) changed on every process.
+            config_checksum = report.compute_config_checksum(config)
 
-            # Build scenario list for manifest
+            # Build scenario list for manifest. "scenario_name" is included so
+            # that `status` renders a name rather than "unknown".
             manifest_scenarios = []
             for result in all_scenario_results:
+                suffix = result.get("scenario_suffix", "")
                 manifest_scenarios.append(
                     {
+                        "scenario_name": result.get(
+                            "scenario_name", f"scenario{suffix}"
+                        ),
+                        "year": result.get("year"),
                         "scenario_index": result.get("scenario_index", 0),
-                        "scenario_suffix": result.get("scenario_suffix", ""),
+                        "scenario_suffix": suffix,
                         "scenario_params": result.get("scenario_params", {}),
                         "start_time": result.get("start_time", start_time.isoformat()),
                         "end_time": result.get("end_time", end_time.isoformat()),
                         "duration_seconds": result.get("duration_seconds", 0),
                         "success": result.get("success", False),
+                        "error": result.get("error"),
+                        "output_dir": result.get("output_dir"),
                     }
                 )
+
+            # Analyse each scenario's metrics and emit a per-scenario HTML report.
+            analyzer = analysis.BottleneckAnalyzer(config.get("performance_thresholds"))
+            analyses = []
+            scenario_metrics: dict[str, list[dict[str, Any]]] = {}
+            for result in all_scenario_results:
+                out_dir = result.get("output_dir")
+                if not out_dir:
+                    continue
+                out_path = Path(out_dir)
+                name = f"scenario{result.get('scenario_suffix', '')}"
+                metrics_files = sorted(
+                    out_path.glob("metrics_*.csv"),
+                    key=lambda f: f.stat().st_mtime,
+                )
+                if not metrics_files:
+                    continue
+                scenario_analyses = [
+                    analyzer.analyze(mf, scenario_name=f"{name}_{mf.stem}")
+                    for mf in metrics_files
+                ]
+                analyses.extend(scenario_analyses)
+                for mf in metrics_files:
+                    scenario_metrics[
+                        f"{name}_{mf.stem}"
+                    ] = report.load_metrics_from_csv(mf)
+
+                # Per-scenario report, promised by docs but never generated
+                # before: {output_dir}/reports/run_report.html
+                try:
+                    sc_reports_dir = out_path / "reports"
+                    sc_reports_dir.mkdir(parents=True, exist_ok=True)
+                    sc_manifest = dict(result)
+                    sc_manifest.update(
+                        {
+                            "run_id": f"{run_id}_{name}",
+                            "site_id": site_id,
+                            "scenarios": [
+                                s
+                                for s in manifest_scenarios
+                                if s["scenario_suffix"]
+                                == result.get("scenario_suffix", "")
+                            ],
+                            "metrics_summary": {
+                                "schema_version": 2,
+                                "scenarios": [a.to_dict() for a in scenario_analyses],
+                                "primary_bottleneck": (
+                                    scenario_analyses[0].primary_bottleneck
+                                    if scenario_analyses
+                                    else "UNKNOWN"
+                                ),
+                            },
+                        }
+                    )
+                    report.generate_html_report(
+                        run_manifest=sc_manifest,
+                        scenario_metrics={
+                            f"{name}_{mf.stem}": scenario_metrics[f"{name}_{mf.stem}"]
+                            for mf in metrics_files
+                        },
+                        chart_engine=config.get("report_charts", "plotly"),
+                        output_path=sc_reports_dir / "run_report.html",
+                    )
+                except Exception as sc_err:
+                    logging.warning(f"Failed to generate report for {name}: {sc_err}")
+
+            metrics_summary = (
+                {
+                    "schema_version": 2,
+                    "scenarios": [a.to_dict() for a in analyses],
+                    "primary_bottleneck": analysis.dominant_bottleneck(analyses),
+                }
+                if analyses
+                else None
+            )
+
+            overall_success = all(r["success"] for r in all_scenario_results)
 
             # Generate and write manifest
             manifest = report.generate_run_manifest(
@@ -774,16 +1083,32 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
                 scenarios=manifest_scenarios,
                 start_time=start_time,
                 end_time=end_time,
-                overall_success=all(r["success"] for r in all_scenario_results),
+                overall_success=overall_success,
                 output_dirs=output_dirs,
+                provenance=report.get_provenance(config),
+                errors=[
+                    f"{s['scenario_name']}: {s['error']}"
+                    for s in manifest_scenarios
+                    if s.get("error")
+                ],
+                status="completed" if overall_success else "failed",
+                metrics_summary=metrics_summary,
             )
-
-            # Add dry_run flag to config for manifest
-            manifest["dry_run"] = hasattr(args, "dry_run") and args.dry_run
 
             # Write manifest
             manifest_path = reports_dir / "run_manifest.json"
             report.write_run_manifest(manifest, manifest_path)
+
+            # Aggregate comparison report across all scenarios
+            try:
+                report.generate_html_report(
+                    run_manifest=manifest,
+                    scenario_metrics=scenario_metrics or None,
+                    chart_engine=config.get("report_charts", "plotly"),
+                    output_path=reports_dir / "run_report.html",
+                )
+            except Exception as agg_err:
+                logging.warning(f"Failed to generate aggregate report: {agg_err}")
 
             logging.info("Reports generated successfully")
         except Exception:
@@ -923,6 +1248,23 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"End Time: {end_time_str}")
     print(f"Duration: {duration:.1f} seconds")
     print(f"Mode: {'Dry Run' if dry_run else 'Production'}")
+    print(f"Status: {manifest.get('status', 'unknown')}")
+
+    # Per-year outcome, including years that failed. `years_processed` lists only
+    # successes, so a failed year would otherwise be invisible in this output.
+    year_records = manifest.get("years", [])
+    if year_records:
+        print("\n" + "-" * 70)
+        print(f"{'Year':<8} {'Status':<12} {'Duration (s)':<15} {'Error'}")
+        print("-" * 70)
+        for rec in year_records:
+            err = rec.get("error") or ""
+            if len(err) > 30:
+                err = err[:27] + "..."
+            print(
+                f"{rec.get('year', '?'):<8} {rec.get('status', '?'):<12} "
+                f"{rec.get('duration_seconds', 0):<15.1f} {err}"
+            )
 
     # Scenarios summary
     scenarios_data = manifest.get("scenarios", [])
@@ -940,20 +1282,29 @@ def cmd_status(args: argparse.Namespace) -> int:
 
             print(f"{scenario_name:<25} {scenario_duration:<15.1f} {status:<10}")
 
-    # Metrics summary
-    metrics_summary = manifest.get("metrics_summary", {})
+    # Performance summary and bottleneck verdict
+    metrics_summary = manifest.get("metrics_summary") or {}
     if metrics_summary:
         print("\n" + "-" * 70)
-        print("Performance Metrics")
+        print("Performance")
         print("-" * 70)
-        for key, value in metrics_summary.items():
-            if isinstance(value, int | float):
-                print(f"{key}: {value:.2f}")
-            else:
-                print(f"{key}: {value}")
+        print(f"Primary bottleneck: {metrics_summary.get('primary_bottleneck')}")
+        for entry in metrics_summary.get("scenarios", []):
+            cpu = entry.get("cpu", {})
+            print(
+                f"  {entry.get('scenario_name', '?'):<18} "
+                f"{entry.get('primary_bottleneck', '?'):<18} "
+                f"CPU p95 {cpu.get('p95', 0):>6.1f}%  "
+                f"peak RAM {entry.get('peak_memory_mb', 0):>7.0f} MB  "
+                f"read {entry.get('total_read_mb', 0):>7.0f} MB  "
+                f"write {entry.get('total_write_mb', 0):>7.0f} MB"
+            )
+            if entry.get("explanation"):
+                print(f"      {entry['explanation']}")
 
-    # Output paths
-    outputs = manifest.get("outputs", [])
+    # Output paths. The manifest key is "output_dirs"; reading "outputs" meant
+    # this section never rendered.
+    outputs = manifest.get("output_dirs", [])
     if outputs:
         print("\n" + "-" * 70)
         print("Output Directories")

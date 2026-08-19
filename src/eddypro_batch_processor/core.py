@@ -7,17 +7,18 @@ while preserving existing behavior and outputs.
 
 import json
 import logging
+import os
 import platform
 import shutil
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
 import yaml
 
-from . import ecmd, ini_tools, report
+from . import analysis, ecmd, ini_tools, report
 from .monitor import MonitoredOperation
 from .scenarios import Scenario
 
@@ -137,27 +138,33 @@ class EddyProBatchProcessor:
 
 
 def run_subprocess_with_monitoring(
-    command: str,
+    command: list[str],
     working_dir: Path,
     stream_output: bool = True,
     metrics_interval: float = 0.5,
     output_dir: Path | None = None,
     scenario_suffix: str = "",
     log_output: bool = True,
+    monitoring_enabled: bool = True,
 ) -> int:
     """
     Execute a subprocess command with performance monitoring.
 
-    This function runs the given command in a subprocess, optionally streams output,
-    and monitors performance metrics during execution.
+    The command is passed as an argv list and launched WITHOUT ``shell=True``.
+    That matters for more than quoting: under a shell, ``Popen.pid`` is the PID of
+    the intermediate ``cmd.exe`` wrapper rather than EddyPro itself, so the monitor
+    would sample an idle shell and report 0% CPU and no disk I/O for the whole run.
 
     Args:
-        command: The command line string to execute
+        command: The command as an argv list, e.g. ``[exe, "-s", "win", project]``
         working_dir: Directory to execute the command in
         stream_output: Whether to stream output in real-time
         metrics_interval: Sampling interval for performance monitoring
         output_dir: Directory to write metrics files (defaults to working_dir)
         scenario_suffix: Suffix for metrics files in scenario runs
+        log_output: Whether to mirror subprocess output into the log
+        monitoring_enabled: When False, no monitor is started and no metrics files
+            are written
 
     Returns:
         Subprocess return code, or -1 if an exception occurs
@@ -170,22 +177,19 @@ def run_subprocess_with_monitoring(
             interval_seconds=metrics_interval,
             output_dir=metrics_output_dir,
             scenario_suffix=scenario_suffix,
+            enabled=monitoring_enabled,
         ) as monitor:
-            # Start the subprocess
-            process = subprocess.Popen(  # nosec B602
+            process = subprocess.Popen(  # nosec B603
                 command,
-                shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 cwd=working_dir,
             )
 
-            # Start monitoring the specific process if monitor is available
+            # Point the already-running monitor at the real EddyPro process tree.
             if monitor and process.pid:
-                # Stop current monitoring and restart with process PID
-                monitor.stop_monitoring()
-                monitor.start_monitoring(process_pid=process.pid)
+                monitor.attach_process(process.pid)
 
             # Handle output streaming
             if stream_output and process.stdout:
@@ -205,7 +209,7 @@ def run_subprocess_with_monitoring(
             return return_code
 
     except Exception:
-        logging.exception(f"Failed to execute command '{command}'")
+        logging.exception(f"Failed to execute command {command!r}")
         return -1
 
 
@@ -216,6 +220,7 @@ def run_eddypro_with_monitoring(
     metrics_interval: float = 0.5,
     scenario_suffix: str = "",
     log_output: bool = True,
+    monitoring_enabled: bool = True,
 ) -> bool:
     """
     Run EddyPro processing with performance monitoring.
@@ -226,6 +231,8 @@ def run_eddypro_with_monitoring(
         stream_output: Whether to stream subprocess output
         metrics_interval: Performance monitoring sampling interval
         scenario_suffix: Suffix for scenario-specific metrics files
+        log_output: Whether to mirror EddyPro output into the log
+        monitoring_enabled: When False, no performance metrics are collected
 
     Returns:
         True if both eddypro_rp and eddypro_fcc succeed, False otherwise
@@ -266,9 +273,8 @@ def run_eddypro_with_monitoring(
 
     # Construct commands
     os_suffix = "win" if platform.system() == "Windows" else "linux"
-    command_sys = f" -s {os_suffix} "
-    rp_command = f'"{rp_executable}"{command_sys}"{project_file}"'
-    fcc_command = f'"{fcc_executable}"{command_sys}"{project_file}"'
+    rp_command = [str(rp_executable), "-s", os_suffix, str(project_file)]
+    fcc_command = [str(fcc_executable), "-s", os_suffix, str(project_file)]
 
     success = True
 
@@ -282,6 +288,7 @@ def run_eddypro_with_monitoring(
         output_dir=output_dir,
         scenario_suffix=f"{scenario_suffix}_rp" if scenario_suffix else "rp",
         log_output=log_output,
+        monitoring_enabled=monitoring_enabled,
     )
     if rp_return_code != 0:
         logging.error(f"eddypro_rp failed with return code {rp_return_code}")
@@ -298,6 +305,7 @@ def run_eddypro_with_monitoring(
             output_dir=output_dir,
             scenario_suffix=f"{scenario_suffix}_fcc" if scenario_suffix else "fcc",
             log_output=log_output,
+            monitoring_enabled=monitoring_enabled,
         )
         if fcc_return_code != 0:
             logging.error(f"eddypro_fcc failed with return code {fcc_return_code}")
@@ -342,6 +350,8 @@ def generate_run_report(
     start_time: datetime,
     end_time: datetime,
     overall_success: bool = True,
+    year_records: list[dict[str, Any]] | None = None,
+    errors: list[str] | None = None,
 ) -> None:
     """
     Generate run manifest and HTML report after processing completes.
@@ -349,11 +359,13 @@ def generate_run_report(
     Args:
         config: Configuration dictionary
         site_id: Site identifier
-        years_processed: List of years that were processed
+        years_processed: Years that completed successfully
         output_base_dir: Base output directory (parent of year-specific dirs)
         start_time: Processing start time (datetime)
         end_time: Processing end time (datetime)
         overall_success: Whether all processing succeeded
+        year_records: Per-year status records, including failed years
+        errors: Run-level error messages
     """
     # Determine reports directory
     reports_dir_config = config.get("reports_dir")
@@ -377,8 +389,8 @@ def generate_run_report(
         if year_dir.exists():
             output_dirs.append(year_dir)
 
-    # Compute config checksum (simple hash of sorted config JSON)
-    config_checksum = str(hash(json.dumps(config, sort_keys=True)))
+    # Stable SHA256 -- the previous str(hash(...)) changed on every process.
+    config_checksum = report.compute_config_checksum(config)
 
     # Collect scenarios (single baseline scenario for now)
     scenario_list = [
@@ -392,18 +404,33 @@ def generate_run_report(
         }
     ]
 
-    # Load metrics if available
+    # Load metrics and analyse the bottleneck for each year that produced them.
     scenario_metrics = {}
+    analyses: list[analysis.ScenarioAnalysis] = []
+    analyzer = analysis.BottleneckAnalyzer(config.get("performance_thresholds"))
     for year in years_processed:
         year_dir = Path(
             config.get("output_dir_pattern", "").format(year=year, site_id=site_id)
         )
-        metrics_files = list(year_dir.glob("metrics_*.csv"))
-        if metrics_files:
-            # Load the most recent metrics file
-            metrics_file = sorted(metrics_files)[-1]
-            metrics = report.load_metrics_from_csv(metrics_file)
-            scenario_metrics[f"{year}_baseline"] = metrics
+        # Sort by modification time: lexicographic ordering put "_rp" after
+        # "_fcc" regardless of which actually ran last.
+        metrics_files = sorted(
+            year_dir.glob("metrics_*.csv"), key=lambda f: f.stat().st_mtime
+        )
+        for metrics_file in metrics_files:
+            label = f"{year}_{metrics_file.stem.replace('metrics_', '')}"
+            scenario_metrics[label] = report.load_metrics_from_csv(metrics_file)
+            analyses.append(analyzer.analyze(metrics_file, scenario_name=label))
+
+    metrics_summary = (
+        {
+            "schema_version": 2,
+            "scenarios": [a.to_dict() for a in analyses],
+            "primary_bottleneck": analysis.dominant_bottleneck(analyses),
+        }
+        if analyses
+        else None
+    )
 
     # Generate run manifest
     run_manifest = report.generate_run_manifest(
@@ -417,6 +444,11 @@ def generate_run_report(
         end_time=end_time,
         overall_success=overall_success,
         output_dirs=output_dirs,
+        provenance=report.get_provenance(config),
+        years=year_records,
+        errors=errors,
+        status="completed" if overall_success else "failed",
+        metrics_summary=metrics_summary,
     )
 
     # Write run manifest
@@ -437,6 +469,21 @@ def generate_run_report(
     logging.info(f"Run manifest generated: {manifest_path}")
 
 
+def _write_scenario_manifest(
+    scenario_output_dir: Path, suffix: str, metadata: dict[str, Any]
+) -> None:
+    """Write a scenario manifest atomically, tolerating a failed write."""
+    manifest_path = scenario_output_dir / f"scenario_manifest{suffix}.json"
+    try:
+        scenario_output_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = manifest_path.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2)
+        os.replace(tmp_path, manifest_path)
+    except Exception:
+        logging.exception(f"Failed to write scenario manifest to {manifest_path}")
+
+
 def run_single_scenario(
     scenario: Scenario,
     template_path: Path,
@@ -451,6 +498,7 @@ def run_single_scenario(
     input_dir: Path,
     ecmd_file: Path | None = None,
     dry_run: bool = False,
+    monitoring_enabled: bool = True,
 ) -> dict[str, Any]:
     """
     Execute a single scenario with patched parameters.
@@ -467,7 +515,7 @@ def run_single_scenario(
     Returns:
         Dictionary containing scenario execution metadata
     """
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
 
     # Create scenario-specific output directory
     scenario_output_dir = output_base_dir / f"scenario{scenario.suffix}"
@@ -601,6 +649,7 @@ def run_single_scenario(
                 metrics_interval=metrics_interval,
                 scenario_suffix=scenario.suffix,
                 log_output=log_output,
+                monitoring_enabled=monitoring_enabled,
             )
             return_code = 0 if success else 1
         else:
@@ -608,11 +657,14 @@ def run_single_scenario(
                 f"Scenario {scenario.index}: Dry run mode - skipping execution"
             )
 
-        end_time = datetime.now()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
 
-        # Build scenario metadata
+        # Build scenario metadata. "scenario_name" is emitted here and by the
+        # regular `run` path so that `status` can read one consistent shape.
         metadata = {
+            "scenario_name": f"{year}_scenario{scenario.suffix}",
+            "year": year,
             "scenario_index": scenario.index,
             "scenario_suffix": scenario.suffix,
             "scenario_params": scenario.parameters,
@@ -623,13 +675,11 @@ def run_single_scenario(
             "duration_seconds": duration,
             "success": success,
             "return_code": return_code,
+            "error": None,
             "dry_run": dry_run,
         }
 
-        # Write scenario manifest
-        manifest_path = scenario_output_dir / f"scenario_manifest{scenario.suffix}.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2)
+        _write_scenario_manifest(scenario_output_dir, scenario.suffix, metadata)
 
         logging.info(
             f"Scenario {scenario.index} {'completed' if success else 'failed'} "
@@ -637,12 +687,14 @@ def run_single_scenario(
         )
 
     except Exception as e:
-        end_time = datetime.now()
+        end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
 
         logging.exception(f"Scenario {scenario.index} failed with exception")
 
         metadata = {
+            "scenario_name": f"{year}_scenario{scenario.suffix}",
+            "year": year,
             "scenario_index": scenario.index,
             "scenario_suffix": scenario.suffix,
             "scenario_params": scenario.parameters,
@@ -658,6 +710,10 @@ def run_single_scenario(
             "error": str(e),
             "dry_run": dry_run,
         }
+
+        # A failing scenario must still leave a manifest behind; previously this
+        # metadata was built and then silently discarded.
+        _write_scenario_manifest(scenario_output_dir, scenario.suffix, metadata)
 
     return metadata
 
@@ -676,6 +732,7 @@ def run_scenario_batch(
     input_dir: Path,
     ecmd_file: Path | None = None,
     dry_run: bool = False,
+    monitoring_enabled: bool = True,
 ) -> list[dict[str, Any]]:
     """
     Execute a batch of scenarios sequentially.
@@ -709,6 +766,7 @@ def run_scenario_batch(
             input_dir=input_dir,
             ecmd_file=ecmd_file,
             dry_run=dry_run,
+            monitoring_enabled=monitoring_enabled,
         )
         scenario_results.append(result)
 
