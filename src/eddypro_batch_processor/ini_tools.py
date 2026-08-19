@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 INI Tools for EddyPro Batch Processor.
 
@@ -797,34 +796,3 @@ def get_parameter_info() -> dict[str, dict[str, Any]]:
         Dictionary with parameter information
     """
     return PARAMETER_VALIDATION.copy()
-
-
-def generate_scenario_suffix(parameters: dict[str, int]) -> str:
-    """
-    Generate a deterministic suffix for scenario identification.
-
-    Args:
-        parameters: Dictionary of parameter name -> value pairs
-
-    Returns:
-        String suffix like "_rot1_tlag2_det0_spk0"
-    """
-    if not parameters:
-        return ""
-
-    # Create suffix in consistent order
-    suffix_parts = []
-    for param_name in sorted(parameters.keys()):
-        value = parameters[param_name]
-        # Use short names for suffix
-        short_names = {
-            "rot_meth": "rot",
-            "tlag_meth": "tlag",
-            "detrend_meth": "det",
-            "despike_meth": "spk",
-            "hf_meth": "hf",
-        }
-        short_name = short_names.get(param_name, param_name)
-        suffix_parts.append(f"{short_name}{value}")
-
-    return "_" + "_".join(suffix_parts)
