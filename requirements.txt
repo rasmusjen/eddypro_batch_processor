@@ -1,8 +1,8 @@
-certifi==2024.8.30
-charset-normalizer==3.4.0
-idna==3.10
-PyYAML==6.0.2
-requests==2.32.3
-urllib3==2.2.3
-psutil>=5.8.0
+# Runtime dependencies. Authoritative source is pyproject.toml [project.dependencies];
+# this file exists for `pip install -r requirements.txt` convenience and must be kept
+# in sync with pyproject.toml.
+pyyaml>=6.0
+psutil>=5.9.0
 plotly>=5.0.0
+tqdm>=4.64.0
+pandas>=1.5.0

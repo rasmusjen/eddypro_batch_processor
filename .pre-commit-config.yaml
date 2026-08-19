@@ -31,7 +31,7 @@ repos:
       - id: mypy
         additional_dependencies: [types-PyYAML, types-requests]
         args: [--ignore-missing-imports, --no-strict-optional]
-        exclude: ^(tests/|docs/|src/eddypro_batch_processor\.py)
+        exclude: ^(tests/|docs/)
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.5
@@ -39,4 +39,4 @@ repos:
       - id: bandit
         args: [-c, pyproject.toml]
         additional_dependencies: ["bandit[toml]", "pbr"]
-        exclude: ^(tests/|src/eddypro_batch_processor\.py)
+        exclude: ^tests/

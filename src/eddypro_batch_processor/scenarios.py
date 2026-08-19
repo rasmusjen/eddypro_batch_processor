@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Scenario Generation for EddyPro Batch Processor.
 
