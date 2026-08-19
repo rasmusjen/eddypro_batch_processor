@@ -9,7 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--version` global CLI flag** to print the installed package version and exit.
+
+- **`monitoring_enabled` config key and `--monitor`/`--no-monitor` CLI flags**
+  (available on both `run` and `scenarios`). When disabled, no metrics files
+  are written and `metrics_interval_seconds` is ignored.
+
+- **`--reports-dir` on `scenarios`**, matching the flag already available on
+  `run` and `status`.
+
+- **Multiprocessing wired for `run`**: `--mp --max-proc N` (or
+  `multiprocessing: true` / `max_processes: N` in config) now parallelizes
+  `run` across years, one worker per year, up to `max_processes` concurrent
+  workers. See [docs/MULTI_YEAR_RUNS.md](docs/MULTI_YEAR_RUNS.md).
+
+- **Scenario HTML reports**: `scenarios` now generates a per-scenario HTML
+  report at `{output_dir}/{scenario_suffix}/reports/run_report.html`, plus
+  one aggregate comparison report across all scenarios.
+
+- **Run manifest provenance**: manifests now include a `provenance` block
+  (git SHA + dirty flag, package version, EddyPro executable path and
+  SHA256 checksum, `sys.argv`), a `manifest_schema_version: 2` field, and a
+  per-year `years[]` array (`{year, status, duration_seconds, error,
+  output_dir}`) so failed years are visible instead of silently vanishing.
+
 - Investigation doc on EddyPro execution path differences between `run` and `scenarios`.
+
+### Fixed
+
+- **Performance monitoring was measuring the wrong process.** The monitor
+  previously sampled the `cmd.exe`/shell wrapper used to launch EddyPro, so
+  CPU and disk I/O were always reported as `0.0`. It now samples the whole
+  EddyPro process tree, producing real CPU, memory, and disk numbers,
+  including derived disk rates (`read_mb_per_s`, `write_mb_per_s`) and a
+  CPU/MEMORY/DISK_THROUGHPUT/DISK_IOPS bottleneck classification shown in
+  the HTML report and run manifest.
+
+- **`config_checksum` is now a real SHA256** of the canonicalised config
+  JSON (plus a separate SHA256 of the raw config file). It previously used
+  Python's per-process-salted `hash()`, so the checksum changed on every
+  run even with an identical config, making it useless for detecting real
+  changes.
+
+- **Manifest timestamps are now UTC with explicit offset**, and the
+  manifest is written atomically (temp file + `os.replace`) at the start of
+  a run (`status: "running"`) and rewritten at the end — including when
+  every year fails, so a manifest always exists after a run is attempted.
 
 - **Static .metadata population from ECMD**
   - Selects the ECMD row closest to but not later than the processing year

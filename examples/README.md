@@ -5,9 +5,14 @@ This directory contains example configurations and sample data to help you get s
 ## Contents
 
 - **`config.yaml`** - Basic configuration example
+- **`multi_year_config.yaml`** - Full multi-year run example (site GL-Dsk, 2020-2025); see [docs/MULTI_YEAR_RUNS.md](../docs/MULTI_YEAR_RUNS.md)
 - **`sample_ecmd.csv`** - Example ECMD metadata file format
 - **`basic_project.ini`** - Minimal EddyPro project configuration
 - **`README.md`** - This file
+
+For the full, authoritative config reference with every key, see
+[`config/config.yaml.example`](../config/config.yaml.example) and
+[docs/CONFIG.md](../docs/CONFIG.md).
 
 ## Quick Start
 

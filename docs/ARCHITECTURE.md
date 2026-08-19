@@ -114,15 +114,20 @@ graph TD
    - Populate static metadata from ECMD row
 
 5. **Processing Execution** (`core.py`)
-   - `run`: executes configured EddyPro executable directly
-   - `scenarios`: copies EddyPro binaries and runs both `eddypro_rp` and `eddypro_fcc`
-   - Capture performance metrics
+   - Both `run` and `scenarios` copy EddyPro binaries to a local `bin/`
+     folder and run `eddypro_rp` followed by `eddypro_fcc` (fcc is skipped
+     if rp fails)
+   - `run` parallelizes across years when `multiprocessing: true`
+     (one worker per year, up to `max_processes`)
+   - Capture performance metrics (unless `monitoring_enabled: false`)
    - Handle errors and timeouts
 
 6. **Report Generation** (`report.py`)
-   - Generate HTML reports with charts (currently for `run` executions)
-   - Create JSON manifests
-   - Package performance data
+   - Generate HTML reports with charts for both `run` and `scenarios`
+     (`scenarios` additionally produces an aggregate comparison report)
+   - Create JSON manifests with provenance (git SHA, package version,
+     EddyPro executable checksum, `sys.argv`) and per-year status
+   - Package performance data, including bottleneck classification
 
 ---
 
@@ -366,7 +371,7 @@ The architecture provides several extension points for future enhancements:
 ### Optional Dependencies
 
 - **psutil**: System monitoring (graceful fallback)
-- **plotly**: Interactive charts (SVG fallback)
+- **plotly**: Interactive charts (if absent, reports render without charts; no automatic SVG fallback — select `report_charts: svg` explicitly)
 - **jinja2**: Advanced templating (future use)
 
 ### Development Dependencies
@@ -390,29 +395,10 @@ The architecture provides several extension points for future enhancements:
 
 ### Configuration Structure
 
-```yaml
-# Core settings
-eddypro_executable: "/path/to/eddypro"
-site_id: "GL-ZaF"
-years_to_process: [2021, 2022]
-
-# Path patterns
-input_dir_pattern: "/data/raw/{site_id}/{year}"
-output_dir_pattern: "/data/processed/{site_id}/{year}"
-ecmd_file: "/data/{site_id}_ecmd.csv"
-
-# Processing options
-multiprocessing: true
-max_processes: 4
-stream_output: true
-
-# Monitoring
-metrics_interval_seconds: 0.5
-
-# Reporting
-reports_dir: null  # Auto-generate
-report_charts: "plotly"  # plotly, svg, none
-```
+See [`config/config.yaml.example`](../config/config.yaml.example) for the
+full, authoritative set of keys (core settings, path patterns,
+multiprocessing, monitoring, and reporting options), and
+[CONFIG.md](CONFIG.md) for the key-by-key reference.
 
 ### Template System
 

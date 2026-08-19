@@ -1,0 +1,55 @@
+# Multi-year run example: site GL-Dsk, 2020-2025.
+#
+# A multi-year run applies the SAME processing settings across several years.
+# This is distinct from a scenario run (see docs/SCENARIOS.md), which applies
+# several combinations of processing parameters to the same year(s).
+# See docs/MULTI_YEAR_RUNS.md for the full worked walkthrough, including the
+# pure-CLI equivalent of this file.
+#
+# Usage:
+#   eddypro-batch --config examples/multi_year_config.yaml validate
+#   eddypro-batch --config examples/multi_year_config.yaml run --dry-run
+#   eddypro-batch --config examples/multi_year_config.yaml run
+
+# Path to the EddyPro raw-processing executable
+eddypro_executable: "C:/Program Files/LI-COR/EddyPro-7.0.9/bin/eddypro_rp.exe"
+
+# Site identifier
+site_id: GL-Dsk
+
+# Six years processed with identical settings
+years_to_process: [2020, 2021, 2022, 2023, 2024, 2025]
+
+# Input/output directory patterns ({site_id} and {year} are substituted per year)
+input_dir_pattern:  "D:/L0_raw/{site_id}/{year}/ec/rflux_csv"
+output_dir_pattern: "D:/L1_processed/{site_id}/{year}/ec_rflux_sc26"
+
+# Site instrument/metadata history (ECMD)
+ecmd_file: "D:/L1_processed/{site_id}/ecmd/{site_id}_ecmd.csv"
+
+# Parallelize across years: one EddyPro run per year, up to 6 concurrent workers.
+# Choose max_processes based on physical cores and disk throughput (see
+# docs/MULTI_YEAR_RUNS.md for guidance on reading the bottleneck report).
+multiprocessing: true
+max_processes: 6
+
+# Output streaming and logging
+stream_output: true
+log_level: INFO
+log_file: "logs/GL-Dsk_eddypro_processing.log"
+log_max_bytes: 10485760
+log_backup_count: 5
+log_eddypro_output: true
+
+# Performance monitoring: sample CPU/memory/disk every second per year-worker.
+# Set monitoring_enabled: false for maximum throughput on large batches.
+monitoring_enabled: true
+metrics_interval_seconds: 1.0
+
+# Reports directory set explicitly: it otherwise defaults to the FIRST
+# processed year's output directory, which is confusing for a multi-year run.
+reports_dir: "D:/L1_processed/GL-Dsk/reports/2020-2025"
+report_charts: plotly
+
+# Use the default project template
+project_template: null

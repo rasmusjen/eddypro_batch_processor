@@ -5,48 +5,57 @@ It is intended to keep docs aligned with the actual behavior in the codebase.
 
 ## Current Known Issues
 
-### 1) Scenario runs depend on `eddypro_fcc`
+### 1) Scenario (and run) execution depends on `eddypro_fcc`
 
-- **What happens:** Scenario execution uses `run_eddypro_with_monitoring()` which
-  copies the EddyPro binaries and runs both `eddypro_rp` and `eddypro_fcc`.
+- **What happens:** Both `run` and `scenarios` use
+  `run_eddypro_with_monitoring()`, which copies the EddyPro binaries and runs
+  both `eddypro_rp` and `eddypro_fcc`.
 - **Failure mode:** If `eddypro_fcc` is missing from the same directory as
-  `eddypro_executable`, or if `eddypro_fcc` cannot run on the host, scenarios fail.
-- **Impact:** Scenario runs can error even when a regular `run` succeeds.
-- **Notes:** This is likely the source of the “pipeline still cannot run everything
-  without errors” observation. It is consistent with failures seen when
-  `eddypro_fcc` is absent or not executable.
+  `eddypro_executable`, or if `eddypro_fcc` cannot run on the host, processing
+  fails for that year/scenario.
+- **Impact:** Runs can error even when only the raw-processing step
+  (`eddypro_rp`) would have succeeded.
 
-### 2) Execution path mismatch (`run` vs `scenarios`)
+### 2) Execution path parity (`run` vs `scenarios`)
 
-- **`run`:** Executes the configured `eddypro_executable` directly.
-- **`scenarios`:** Runs `eddypro_rp` then `eddypro_fcc` from a copied `bin/` folder.
-- **Impact:** Outputs and error modes can diverge between `run` and `scenarios`.
-  This is a deliberate design today but should be documented as a limitation.
+- **`run`:** Copies EddyPro binaries to a local `bin/` folder and runs
+  `eddypro_rp` then `eddypro_fcc` (same strategy as `scenarios`).
+- **`scenarios`:** Runs `eddypro_rp` then `eddypro_fcc` from a copied `bin/`
+  folder, once per scenario.
+- **Status:** The two commands now use the same execution strategy, so this
+  is no longer a source of divergent outputs/error modes. It remains listed
+  here because the two commands still differ in other ways worth knowing:
+  `run` parallelizes across years when `multiprocessing: true`; `scenarios`
+  processes years sequentially and parallelizes scenarios within a year not
+  at all (scenarios run one after another).
 
-### 3) Metrics schema mismatch with report chart loader
+### 3) ~~Metrics schema mismatch with report chart loader~~ — FIXED
 
-- **Observed:** The monitor writes raw metrics with fields like
-  `system_cpu_percent` and `process_memory_rss`.
-- **Report loader expects:** `cpu_percent`, `memory_mb`, `read_mb`, `write_mb`.
-- **Impact:** HTML charts can be empty or missing lines even when metrics exist.
+Performance monitoring now samples the whole EddyPro process tree (not the
+`cmd.exe`/shell wrapper), and the report chart loader's expected fields
+(`cpu_percent`, `memory_mb`, `read_mb`, `write_mb`) match what the monitor
+writes. CPU, memory, and disk figures in `run_report.html` reflect actual
+EddyPro resource usage, including derived disk rates and a
+CPU/MEMORY/DISK_THROUGHPUT/DISK_IOPS bottleneck classification.
 
-### 4) Scenario reports are not generated
+### 4) ~~Scenario reports are not generated~~ — FIXED
 
-- **Current behavior:** `scenarios` writes only `run_manifest.json`.
-- **Expected by docs:** Per-scenario HTML reports and an aggregate report.
-- **Impact:** Users do not get HTML reports for scenario runs today.
+`scenarios` now generates a per-scenario HTML report at
+`{output_dir}/{scenario_suffix}/reports/run_report.html`, plus one aggregate
+comparison report and `run_manifest.json` under `reports_dir`.
 
-### 5) `status` output and scenario manifest schema mismatch
+### 5) ~~`status` output and scenario manifest schema mismatch~~ — FIXED
 
-- **`status` prints:** `scenario_name` from the run manifest.
-- **`scenarios` manifest entries:** `scenario_index` + `scenario_suffix` without
-  `scenario_name`.
-- **Impact:** Status output can show “unknown” for scenario name entries.
+The run manifest's scenario entries and the `status` command's reader are now
+aligned, so scenario names/suffixes display correctly instead of showing
+"unknown".
 
-### 6) Multiprocessing flags are not wired
+### 6) ~~Multiprocessing flags are not wired~~ — FIXED
 
-- `multiprocessing` and `max_processes` are validated but not applied in execution.
-- Runs are currently sequential regardless of these settings.
+`multiprocessing` and `max_processes` are wired into `run`: years are
+processed in parallel, one worker per year, up to `max_processes` concurrent
+workers. Enable via config (`multiprocessing: true`) or CLI (`--mp
+--max-proc N`). See [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md).
 
 ### 7) CLI flag ambiguity
 
@@ -55,41 +64,21 @@ It is intended to keep docs aligned with the actual behavior in the codebase.
 
 ## Investigations / Suspected Root Causes
 
-- **`eddypro_fcc` availability:** Scenario runner explicitly requires it. If
-  installations provide only `eddypro_rp`, scenario runs will fail.
-- **Execution environment:** Scenario runs copy binaries to a local `bin/` folder;
-  missing dependencies or licensing checks can fail after copy.
-
-## Roadmap Items (Planned, Not Implemented Yet)
-
-### Monitoring Toggle
-
-See [MONITORING_TOGGLE_IMPLEMENTATION_PLAN.md](plan/MONITORING_TOGGLE_IMPLEMENTATION_PLAN.md).
-
-Planned:
-- Config `monitoring_enabled: true|false` (default `true`).
-- CLI flags `--monitor` / `--no-monitor` for `run` and `scenarios`.
-- Skip metrics files and monitor creation when disabled.
-- Validation: only enforce positive `metrics_interval_seconds` if enabled.
-
-### Performance Analysis & Reporting Enhancements
-
-See [PERFORMANCE_ANALYSIS_DESIGN.md](plan/PERFORMANCE_ANALYSIS_DESIGN.md).
-
-Planned:
-- New `analysis.py` with `BottleneckAnalyzer` and `ScenarioAnalysis` models.
-- Traffic-light executive summary (CPU/RAM/Disk bottleneck classification).
-- Plotly subplots for CPU, memory, and disk I/O with thresholds.
-- Per-scenario HTML reports and aggregated comparison matrix.
-- Unified baseline scenario model for `run` so analysis is consistent.
+- **`eddypro_fcc` availability:** Both `run` and `scenarios` explicitly
+  require it. If installations provide only `eddypro_rp`, processing will
+  fail (see Issue 1).
+- **Execution environment:** Both commands copy binaries to a local `bin/`
+  folder; missing dependencies or licensing checks can fail after copy.
 
 ## TODO Checklist (High Priority)
 
-- [ ] Decide how to handle `eddypro_fcc` missing on scenario runs (fail fast vs.
-      fallback to `eddypro_rp` only).
-- [ ] Align metrics schema between monitor outputs and report chart loader.
-- [ ] Add HTML report generation for `scenarios` or document as intentionally
-      unsupported.
-- [ ] Wire `multiprocessing` and `max_processes` or mark as deprecated.
-- [ ] Add `monitoring_enabled` config + CLI flags as per plan.
-- [ ] Implement performance analysis module and integrate with reporting.
+- [ ] Decide how to handle `eddypro_fcc` missing on `run`/`scenarios` (fail
+      fast vs. fallback to `eddypro_rp` only).
+- [ ] Consider parallelizing `scenarios` across scenarios/years the same way
+      `run` now parallelizes across years.
+
+## See Also
+
+- [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) – multi-year run behavior and caveats
+- [SCENARIOS.md](SCENARIOS.md) – scenario run behavior and caveats
+- [REPORTING.md](REPORTING.md) – manifest and report schema

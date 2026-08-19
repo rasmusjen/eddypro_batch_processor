@@ -4,6 +4,11 @@ This document explains how to use the `scenarios` command to test multiple param
 
 ## Overview
 
+> A **scenario run** applies *several combinations* of EddyPro processing
+> parameters to the same year(s). This is different from a **multi-year
+> run**, which applies the *same* settings across several years — see
+> [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) for that.
+
 The `scenarios` command allows you to run a Cartesian product of EddyPro processing parameters, enabling systematic testing of different configurations. This is useful for:
 
 - Sensitivity analysis of processing methods
@@ -196,13 +201,16 @@ Located in `{output_dir}/scenario{suffix}/`:
 - `scenario_manifest{suffix}.json` – scenario metadata and metrics
 - `metrics.csv` – performance time series (CPU, memory, I/O)
 
-### Aggregated Reports
+### Per-Scenario and Aggregated Reports
 
-Located in `{output_dir}/reports/`:
+Each scenario gets its own HTML report at
+`{output_dir}/{scenario_suffix}/reports/run_report.html`. In addition, an
+aggregate comparison report and `run_manifest.json` are written to the run's
+`reports_dir` (default `{output_dir}/reports/`):
 
 - `run_manifest.json` – Summary of all scenarios
-- `run_report.html` – Interactive report with charts (currently generated for `run` executions)
-- Scenario comparison tables and visualizations
+- `run_report.html` – Aggregate comparison report across all scenarios, with
+  charts and the bottleneck classification per scenario
 
 See [REPORTING.md](REPORTING.md) for details on report structure and interpretation.
 
@@ -367,5 +375,6 @@ This processes each year with all scenario combinations.
 ## See Also
 
 - [USAGE.md](USAGE.md) – General CLI usage
+- [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) – Multi-year runs (same settings, many years)
 - [CONFIG.md](CONFIG.md) – Configuration options
 - [REPORTING.md](REPORTING.md) – Understanding reports and manifests
