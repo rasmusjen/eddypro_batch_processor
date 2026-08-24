@@ -44,6 +44,13 @@ log_eddypro_output: true
 # Performance monitoring: sample CPU/memory/disk every second per year-worker.
 # Set monitoring_enabled: false for maximum throughput on large batches.
 monitoring_enabled: true
+
+# Bottleneck thresholds must match the drive the data lives on. These are the
+# defaults, sized for a SATA SSD; see docs/CONFIG.md for NVMe and HDD values.
+performance_thresholds:
+  disk_high_mb_per_s: 450
+  disk_moderate_mb_per_s: 250
+  disk_high_iops: 20000
 metrics_interval_seconds: 1.0
 
 # Reports directory set explicitly: it otherwise defaults to the FIRST

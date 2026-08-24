@@ -59,12 +59,19 @@ monitoring_enabled: true
 metrics_interval_seconds: 0.5
 
 # Optional: tune how the bottleneck analyser classifies a run. Defaults assume a
-# mechanical disk; raise the disk limits substantially for NVMe. See
-# docs/CONFIG.md for the full table of keys and defaults.
+# SATA SSD (~550 MB/s). Set these to match the drive the input data lives on,
+# otherwise the disk verdict is meaningless. See docs/CONFIG.md for every key.
 #performance_thresholds:
 #  cpu_high_percent: 90
 #  memory_high_percent: 85
-#  disk_high_mb_per_s: 100
+#  # NVMe SSD:
+#  disk_high_mb_per_s: 3000
+#  disk_moderate_mb_per_s: 1500
+#  disk_high_iops: 200000
+#  # Mechanical disk:
+#  #disk_high_mb_per_s: 150
+#  #disk_moderate_mb_per_s: 80
+#  #disk_high_iops: 150
 
 # Reporting configuration
 reports_dir: null  # Optional: Custom reports directory (default: {output_dir}/reports)
