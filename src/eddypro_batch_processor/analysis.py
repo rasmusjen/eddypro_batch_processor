@@ -46,11 +46,22 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "cpu_idle_percent": 40.0,
     "memory_high_percent": 85.0,
     "memory_moderate_percent": 70.0,
-    # Roughly a mechanical-disk ceiling; raise substantially for NVMe.
-    "disk_high_mb_per_s": 100.0,
-    "disk_moderate_mb_per_s": 50.0,
-    "disk_high_iops": 1000.0,
+    # Calibrated for a SATA SSD (~550 MB/s sequential), which is the common
+    # case for the bulk storage EddyPro reads from. Adjust for other media:
+    #   NVMe SSD  -> disk_high ~3000, moderate ~1500, iops ~200000
+    #   Mechanical -> disk_high ~150,  moderate ~80,   iops ~150
+    "disk_high_mb_per_s": 450.0,
+    "disk_moderate_mb_per_s": 250.0,
+    "disk_high_iops": 20000.0,
 }
+
+
+# Columns the process-tree monitor must emit. Their absence means the file was
+# written by the pre-v2 monitor, whose figures were all 0.0 anyway (it sampled
+# the shell wrapper rather than EddyPro). Reporting UNKNOWN is honest; reporting
+# "no bottleneck, CPU 0.0%" from those files is not.
+CANONICAL_COLUMNS = ("cpu_percent", "memory_mb", "read_mb", "write_mb")
+LEGACY_COLUMNS = ("process_cpu_percent", "process_memory_rss", "process_io_read_bytes")
 
 
 @dataclass
@@ -170,6 +181,24 @@ class BottleneckAnalyzer:
         self, rows: list[dict[str, Any]], scenario_name: str = "baseline"
     ) -> ScenarioAnalysis:
         """Analyse already-parsed metric rows."""
+        if rows and not any(c in rows[0] for c in CANONICAL_COLUMNS):
+            legacy = any(c in rows[0] for c in LEGACY_COLUMNS)
+            detail = (
+                "written by a pre-v2 monitor, whose process metrics were all 0.0"
+                if legacy
+                else "missing every process-tree column"
+            )
+            logger.warning(
+                f"Metrics for {scenario_name} are {detail}; cannot classify."
+            )
+            return ScenarioAnalysis(
+                scenario_name=scenario_name,
+                sample_count=len(rows),
+                explanation=(
+                    f"Unrecognised metrics schema ({detail}). Re-run with the "
+                    f"current version to get a bottleneck verdict."
+                ),
+            )
 
         def series(key: str) -> list[float]:
             return [v for v in (_to_float(r.get(key)) for r in rows) if v is not None]
