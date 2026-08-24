@@ -51,7 +51,9 @@ pre-commit run --all-files
   `D:/L0_raw/`, or `D:/L1_processed/`. These hold irreplaceable raw and
   processed field data.
 - `config/config.yaml` is the user's live working config with
-  machine-specific paths. Don't commit changes to it.
+  machine-specific paths. It is untracked and gitignored — never re-add it
+  with `git add -f`. Edit `config/config.yaml.example` instead when a change
+  belongs in the repo.
 
 ## Code quality
 

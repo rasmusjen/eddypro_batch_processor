@@ -62,6 +62,9 @@ cp config/config.yaml.example config/config.yaml
 # Edit config/config.yaml with your paths and settings
 ```
 
+This step is required: `config/config.yaml` is gitignored (it holds
+machine-specific paths), so a fresh clone does not contain one.
+
 **Key configuration items:**
 
 - Set `eddypro_executable` to your EddyPro installation path
