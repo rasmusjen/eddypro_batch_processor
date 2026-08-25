@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Monitor reported 0.0% CPU for every child process.** psutil records the
+  CPU-times baseline on the `Process` *instance*, and `children(recursive=True)`
+  builds fresh objects on every sample, so each descendant's first (always-zero)
+  reading was the only one ever taken. Process instances are now cached by PID,
+  so baselines persist. This mattered whenever the real work ran in a child
+  rather than the launched process — a Windows venv `python.exe` shim, or
+  EddyPro spawning workers — which produced exactly the all-zero CPU column the
+  process-tree fix was meant to eliminate.
+
+- **`eddypro-batch` with no subcommand printed a config error instead of
+  help.** `main()` validated the config file before dispatching, so on a fresh
+  clone -- where `config/config.yaml` does not exist yet -- the first command
+  anyone runs failed with "Configuration file not found" rather than showing
+  usage. The no-command case now short-circuits to `print_help()`.
+
+- **Pre-v2 metrics files are now reported as `UNKNOWN`** instead of being read
+  as a run with no bottleneck. Those files lack every process-tree column, so
+  the analyser was summarising absent data as `CPU 0.0%` and concluding there
+  was headroom to spare.
+
+### Changed
+
+- **`config/config.yaml` is no longer tracked in git.** It holds
+  machine-specific absolute paths that churned in every diff. The file stays
+  where it is and the default `--config` path is unchanged; only
+  `config/config.yaml.example` is version-controlled now, so a fresh clone must
+  copy it before first use.
+
+- **Default `performance_thresholds` disk limits raised to SATA SSD scale**
+  (`disk_high_mb_per_s` 100 → 450, `disk_moderate_mb_per_s` 50 → 250,
+  `disk_high_iops` 1000 → 20000). The previous values assumed a mechanical disk
+  and flagged ordinary SSD runs as disk-bound. `docs/CONFIG.md` now carries a
+  per-medium table for NVMe, SATA, and mechanical drives.
+
 ### Added
 
 - **`--version` global CLI flag** to print the installed package version and exit.

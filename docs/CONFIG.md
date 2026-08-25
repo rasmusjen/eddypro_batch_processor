@@ -8,6 +8,16 @@ Default location: `config/config.yaml`
 
 Override with: `--config /path/to/config.yaml`
 
+`config/config.yaml` is **not tracked in git** — it holds machine-specific
+absolute paths that differ per install. It is covered by `.gitignore`, so a
+fresh clone has no `config/config.yaml` until you create one:
+
+```powershell
+cp config/config.yaml.example config/config.yaml
+```
+
+Only `config/config.yaml.example` is version-controlled.
+
 ## Configuration Schema
 
 ### Complete Example
@@ -408,8 +418,11 @@ monitoring_enabled: false
 **Default:** see table below
 
 **Description:** Tunes how the bottleneck analyser classifies a run. The
-defaults assume a mechanical disk; on NVMe storage the disk limits should be
-raised substantially or every run will be reported as disk-bound.
+defaults assume a **SATA SSD** (~550 MB/s sequential), which is the common case
+for the bulk storage EddyPro reads from. The disk limits must match the drive
+the input data actually lives on: leave NVMe limits at the SATA default and
+ordinary runs are reported as disk-bound; leave mechanical-disk limits at the
+SATA default and a genuinely saturated disk is never flagged at all.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -418,17 +431,33 @@ raised substantially or every run will be reported as disk-bound.
 | `cpu_idle_percent` | 40 | Below this, a busy disk is read as the limiting factor |
 | `memory_high_percent` | 85 | System memory use that counts as RED |
 | `memory_moderate_percent` | 70 | System memory use that counts as YELLOW |
-| `disk_high_mb_per_s` | 100 | Combined read+write throughput counting as RED |
-| `disk_moderate_mb_per_s` | 50 | Throughput counting as YELLOW |
-| `disk_high_iops` | 1000 | Combined IOPS above which latency is the suspect |
+| `disk_high_mb_per_s` | 450 | Combined read+write throughput counting as RED |
+| `disk_moderate_mb_per_s` | 250 | Throughput counting as YELLOW |
+| `disk_high_iops` | 20000 | Combined IOPS above which latency is the suspect |
 
 Unknown keys are ignored, so a config written for a newer version still loads.
+
+Suggested disk limits by medium:
+
+| Medium | `disk_high_mb_per_s` | `disk_moderate_mb_per_s` | `disk_high_iops` |
+|--------|---------------------|--------------------------|------------------|
+| NVMe SSD | 3000 | 1500 | 200000 |
+| SATA SSD (default) | 450 | 250 | 20000 |
+| Mechanical / USB HDD | 150 | 80 | 150 |
+
+On Windows, check which you have with:
+
+```powershell
+Get-PhysicalDisk | Select-Object FriendlyName, MediaType, BusType
+Get-Partition | Where-Object DriveLetter | Select-Object DriveLetter, DiskNumber
+```
 
 **Example (NVMe):**
 ```yaml
 performance_thresholds:
-  disk_high_mb_per_s: 2000
-  disk_moderate_mb_per_s: 1000
+  disk_high_mb_per_s: 3000
+  disk_moderate_mb_per_s: 1500
+  disk_high_iops: 200000
 ```
 
 **CLI Override:** none — config only.

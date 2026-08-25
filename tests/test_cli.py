@@ -6,6 +6,10 @@ from pathlib import Path
 
 import pytest
 
+# config/config.yaml is untracked (machine-specific paths), so tests must never
+# depend on it. The example config ships with the repo and always exists.
+EXAMPLE_CONFIG = str(Path(__file__).parent.parent / "config" / "config.yaml.example")
+
 
 def test_cli_help_command():
     """Test that eddypro-batch --help returns zero and prints usage."""
@@ -97,6 +101,8 @@ def test_cli_scenarios_stub():
             sys.executable,
             "-m",
             "eddypro_batch_processor.cli",
+            "--config",
+            EXAMPLE_CONFIG,
             "scenarios",
             "--rot-meth",
             "1",

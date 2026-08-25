@@ -123,6 +123,12 @@ class PerformanceMonitor:
         self._io_baseline: tuple[float, float, float, float] | None = None
         self._primed_pids: set[int] = set()
 
+        # psutil records the CPU-times baseline on the Process *instance*, so a
+        # freshly constructed object always reports 0.0. children() builds new
+        # objects on every call, so the instances must be cached by PID or every
+        # descendant reads as idle for the whole run.
+        self._proc_cache: dict[int, psutil.Process] = {}
+
         # Previous sample state, for delta-based rate computation
         self._prev_time: float | None = None
         self._prev_io: tuple[float, float, float, float] | None = None
@@ -285,9 +291,25 @@ class PerformanceMonitor:
         if not self._process:
             return []
         try:
-            return [self._process, *self._process.children(recursive=True)]
+            children = self._process.children(recursive=True)
         except Exception:
             return []
+
+        tracked: list[Any] = [self._process]
+        live_pids = {self._process.pid}
+        for child in children:
+            # setdefault keeps the first instance seen for this PID so its CPU
+            # baseline survives; the newly built object is discarded.
+            tracked.append(self._proc_cache.setdefault(child.pid, child))
+            live_pids.add(child.pid)
+
+        # Drop instances for processes that have exited. Their cumulative I/O is
+        # already retained separately in _io_by_pid, so nothing is lost.
+        for pid in self._proc_cache.keys() - live_pids:
+            del self._proc_cache[pid]
+            self._primed_pids.discard(pid)
+
+        return tracked
 
     def _collect_sample(self) -> dict[str, Any] | None:
         """

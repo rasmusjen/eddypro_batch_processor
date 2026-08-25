@@ -86,8 +86,8 @@ class TestBottleneckClassification:
             cpu_percent=8.0,
             memory_mb=300.0,
             system_memory_percent=35.0,
-            read_mb_per_s=180.0,
-            write_mb_per_s=20.0,
+            read_mb_per_s=500.0,
+            write_mb_per_s=100.0,
         )
         result = BottleneckAnalyzer().analyze(csv_path)
         assert result.primary_bottleneck == "DISK_THROUGHPUT"
@@ -103,8 +103,8 @@ class TestBottleneckClassification:
             system_memory_percent=30.0,
             read_mb_per_s=5.0,
             write_mb_per_s=2.0,
-            read_iops=3000.0,
-            write_iops=500.0,
+            read_iops=25000.0,
+            write_iops=5000.0,
         )
         result = BottleneckAnalyzer().analyze(csv_path)
         assert result.primary_bottleneck == "DISK_IOPS"
@@ -142,8 +142,8 @@ class TestBottleneckClassification:
             tmp_path / "metrics.csv",
             cpu_percent=96.0,
             system_memory_percent=40.0,
-            read_mb_per_s=200.0,
-            write_mb_per_s=200.0,
+            read_mb_per_s=400.0,
+            write_mb_per_s=400.0,
         )
         assert BottleneckAnalyzer().analyze(csv_path).primary_bottleneck == "CPU"
 
@@ -156,14 +156,14 @@ class TestThresholdOverrides:
             tmp_path / "metrics.csv",
             cpu_percent=8.0,
             system_memory_percent=30.0,
-            read_mb_per_s=180.0,
+            read_mb_per_s=600.0,
         )
         assert BottleneckAnalyzer().analyze(csv_path).primary_bottleneck == (
             "DISK_THROUGHPUT"
         )
-        # On an NVMe drive 180 MB/s is unremarkable, so raise the ceiling.
+        # On an NVMe drive 600 MB/s is unremarkable, so raise the ceiling.
         relaxed = BottleneckAnalyzer(
-            {"disk_high_mb_per_s": 2000.0, "disk_moderate_mb_per_s": 1000.0}
+            {"disk_high_mb_per_s": 3000.0, "disk_moderate_mb_per_s": 1500.0}
         )
         assert relaxed.analyze(csv_path).primary_bottleneck == "NONE"
 
@@ -200,6 +200,48 @@ class TestRobustness:
         # Parses what it can rather than raising on the junk cells.
         assert result.sample_count == 5
         assert result.cpu.max == 95.0
+
+
+class TestLegacySchema:
+    """Pre-v2 metrics files must be refused, not silently read as all-zero."""
+
+    LEGACY_FIELDS = [
+        "process_cpu_percent",
+        "process_io_read_bytes",
+        "process_io_write_bytes",
+        "process_memory_rss",
+        "relative_time",
+        "system_cpu_percent",
+        "system_memory_percent",
+        "timestamp",
+    ]
+
+    def _write_legacy(self, path):
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self.LEGACY_FIELDS)
+            writer.writeheader()
+            for i in range(10):
+                row = dict.fromkeys(self.LEGACY_FIELDS, 0.0)
+                row["relative_time"] = float(i)
+                row["system_cpu_percent"] = 12.0
+                row["system_memory_percent"] = 35.0
+                writer.writerow(row)
+        return path
+
+    def test_legacy_file_reports_unknown(self, tmp_path):
+        path = self._write_legacy(tmp_path / "metrics_rp.csv")
+        result = BottleneckAnalyzer().analyze(path)
+        # The old files really do contain 10 rows of zeros; saying "no
+        # bottleneck, CPU 0.0%" from them would be a confident lie.
+        assert result.primary_bottleneck == "UNKNOWN"
+        assert result.sample_count == 10
+        assert "pre-v2" in result.explanation
+
+    def test_current_schema_is_not_mistaken_for_legacy(self, tmp_path):
+        path = make_series(
+            tmp_path / "metrics.csv", cpu_percent=95.0, system_memory_percent=30.0
+        )
+        assert BottleneckAnalyzer().analyze(path).primary_bottleneck == "CPU"
 
 
 class TestDominantBottleneck:
@@ -287,8 +329,15 @@ class TestRealWorkloadMonitoring:
 
         # The load is single-threaded, so normalised CPU is small on a many-core
         # box; cpu_percent_of_core is the column that must show real work.
-        assert max(col("cpu_percent_of_core")) > 20.0, (
-            "process-tree CPU never rose above 20% of a core -- the monitor is "
+        #
+        # The failure mode being guarded against produces exactly 0.0 on every
+        # sample, so the discriminator is "did any real work register at all",
+        # not a magnitude. A throttled shared CI runner legitimately reports
+        # well under 20% of a core here, so asserting a specific level would
+        # only measure the runner.
+        cpu_of_core = col("cpu_percent_of_core")
+        assert max(cpu_of_core) > 1.0, (
+            "process-tree CPU never registered any work -- the monitor is "
             "measuring the wrong process again"
         )
         assert max(col("memory_mb")) > 1.0, "process memory looks like a shell"
@@ -323,6 +372,69 @@ class TestRealWorkloadMonitoring:
         assert result.primary_bottleneck != "UNKNOWN"
         assert result.sample_count > 0
         assert result.total_read_mb + result.total_write_mb > 0
+
+    def test_cpu_is_measured_for_descendants_not_just_the_root(
+        self, tmp_path, burner_script
+    ):
+        """
+        The root must not be the only process whose CPU is counted.
+
+        psutil keeps the CPU-times baseline on the Process *instance*, and
+        ``children()`` returns freshly built objects on every call. Without an
+        instance cache each descendant reports 0.0 forever -- which is exactly
+        what happens when the launched command is a stub that re-execs into a
+        child (a Windows venv ``python.exe`` shim, or EddyPro spawning workers).
+        Here the parent deliberately idles so all the work is in the child.
+        """
+        parent = tmp_path / "spawner.py"
+        parent.write_text(
+            textwrap.dedent(f"""
+                import subprocess, sys, time
+                p = subprocess.Popen([sys.executable, r"{burner_script}"])
+                while p.poll() is None:
+                    time.sleep(0.05)
+                """),
+            encoding="utf-8",
+        )
+
+        out_dir = tmp_path / "metrics"
+        rc = core.run_subprocess_with_monitoring(
+            command=[sys.executable, str(parent)],
+            working_dir=tmp_path,
+            stream_output=False,
+            metrics_interval=0.25,
+            output_dir=out_dir,
+            scenario_suffix="child",
+            log_output=False,
+        )
+        assert rc == 0
+
+        rows = list(
+            csv.DictReader((out_dir / "metrics_child.csv").open(encoding="utf-8"))
+        )
+        cpu = [
+            float(r["cpu_percent_of_core"]) for r in rows if r["cpu_percent_of_core"]
+        ]
+        # Without the instance cache every descendant reads 0.0 on every sample,
+        # and the root here is deliberately idle, so the whole column is zero.
+        # Assert on the *proportion* of samples that registered work rather than
+        # on a level: that separates 0.0-always from working-but-throttled,
+        # which a magnitude threshold cannot do on a shared CI runner.
+        assert max(cpu) > 1.0, (
+            "CPU was only counted for the idle root -- descendant Process "
+            "instances are not being cached, so their baselines never persist"
+        )
+        # Drop the first sample: it is taken before the child has been primed.
+        # A third, not a half: on a slow runner the child can take a couple of
+        # samples to spawn and be primed. The defect yields zero non-zero
+        # samples, so any non-trivial fraction separates the two cases.
+        working = [c for c in cpu[1:] if c > 0.0]
+        assert len(working) >= len(cpu[1:]) / 3, (
+            f"only {len(working)} of {len(cpu[1:])} samples registered child CPU; "
+            f"descendant baselines are not persisting across samples"
+        )
+        procs = [int(r["num_processes"]) for r in rows if r["num_processes"]]
+        assert max(procs) >= 2, "the child process was never tracked"
 
     def test_monitoring_disabled_writes_nothing(self, tmp_path, burner_script):
         out_dir = tmp_path / "metrics"
