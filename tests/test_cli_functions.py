@@ -18,6 +18,11 @@ from eddypro_batch_processor.cli import (
     setup_logging,
 )
 
+# config/config.yaml is untracked (it holds machine-specific paths), so tests
+# must never rely on it existing. The example config is version-controlled and
+# is the only config guaranteed to be present in a fresh clone.
+EXAMPLE_CONFIG = str(Path(__file__).parent.parent / "config" / "config.yaml.example")
+
 
 def _write_ecmd_file(tmp_path: Path, site_id: str) -> Path:
     ecmd_path = tmp_path / "ecmd.csv"
@@ -490,7 +495,7 @@ class TestMainFunction:
 
     def test_main_run_command(self):
         """Test main function routing to run command."""
-        test_args = ["eddypro-batch", "run", "--dry-run"]
+        test_args = ["eddypro-batch", "--config", EXAMPLE_CONFIG, "run", "--dry-run"]
 
         with patch("sys.argv", test_args):
             with patch("eddypro_batch_processor.cli.cmd_run") as mock_cmd_run:
@@ -503,7 +508,14 @@ class TestMainFunction:
 
     def test_main_scenarios_command(self):
         """Test main function routing to scenarios command."""
-        test_args = ["eddypro-batch", "scenarios", "--rot-meth", "1"]
+        test_args = [
+            "eddypro-batch",
+            "--config",
+            EXAMPLE_CONFIG,
+            "scenarios",
+            "--rot-meth",
+            "1",
+        ]
 
         with patch("sys.argv", test_args):
             with patch(
@@ -518,7 +530,7 @@ class TestMainFunction:
 
     def test_main_validate_command(self):
         """Test main function routing to validate command."""
-        test_args = ["eddypro-batch", "validate"]
+        test_args = ["eddypro-batch", "--config", EXAMPLE_CONFIG, "validate"]
 
         with patch("sys.argv", test_args):
             with patch("eddypro_batch_processor.cli.cmd_validate") as mock_cmd_validate:
@@ -531,7 +543,7 @@ class TestMainFunction:
 
     def test_main_status_command(self):
         """Test main function routing to status command."""
-        test_args = ["eddypro-batch", "status"]
+        test_args = ["eddypro-batch", "--config", EXAMPLE_CONFIG, "status"]
 
         with patch("sys.argv", test_args):
             with patch("eddypro_batch_processor.cli.cmd_status") as mock_cmd_status:

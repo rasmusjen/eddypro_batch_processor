@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   EddyPro spawning workers — which produced exactly the all-zero CPU column the
   process-tree fix was meant to eliminate.
 
+- **`eddypro-batch` with no subcommand printed a config error instead of
+  help.** `main()` validated the config file before dispatching, so on a fresh
+  clone -- where `config/config.yaml` does not exist yet -- the first command
+  anyone runs failed with "Configuration file not found" rather than showing
+  usage. The no-command case now short-circuits to `print_help()`.
+
 - **Pre-v2 metrics files are now reported as `UNKNOWN`** instead of being read
   as a run with no bottleneck. Those files lack every process-tree column, so
   the analyser was summarising absent data as `CPU 0.0%` and concluding there

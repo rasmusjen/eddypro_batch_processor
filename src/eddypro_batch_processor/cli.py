@@ -1327,6 +1327,13 @@ def main() -> int:
     # Set up logging early
     setup_logging(args.log_level)
 
+    # With no subcommand there is nothing to configure, so help must print
+    # rather than a config error. On a fresh clone config/config.yaml does not
+    # exist yet, and a bare `eddypro-batch` is the first thing anyone runs.
+    if not args.command:
+        parser.print_help()
+        return 1
+
     # Validate config file exists if provided
     if hasattr(args, "config") and args.config:
         config_path = Path(args.config)
@@ -1334,18 +1341,15 @@ def main() -> int:
             logging.error(f"Configuration file not found: {config_path}")
             return 1
 
-    # Route to appropriate command handler
-    if args.command == "run":
-        return cmd_run(args)
-    elif args.command == "scenarios":
-        return cmd_scenarios(args)
-    elif args.command == "validate":
-        return cmd_validate(args)
-    elif args.command == "status":
-        return cmd_status(args)
-    else:
-        parser.print_help()
-        return 1
+    # Route to appropriate command handler. argparse restricts args.command to
+    # these choices and the empty case returned above, so there is no fallback.
+    handlers = {
+        "run": cmd_run,
+        "scenarios": cmd_scenarios,
+        "validate": cmd_validate,
+        "status": cmd_status,
+    }
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":
