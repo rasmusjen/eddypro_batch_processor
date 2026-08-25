@@ -329,8 +329,15 @@ class TestRealWorkloadMonitoring:
 
         # The load is single-threaded, so normalised CPU is small on a many-core
         # box; cpu_percent_of_core is the column that must show real work.
-        assert max(col("cpu_percent_of_core")) > 20.0, (
-            "process-tree CPU never rose above 20% of a core -- the monitor is "
+        #
+        # The failure mode being guarded against produces exactly 0.0 on every
+        # sample, so the discriminator is "did any real work register at all",
+        # not a magnitude. A throttled shared CI runner legitimately reports
+        # well under 20% of a core here, so asserting a specific level would
+        # only measure the runner.
+        cpu_of_core = col("cpu_percent_of_core")
+        assert max(cpu_of_core) > 1.0, (
+            "process-tree CPU never registered any work -- the monitor is "
             "measuring the wrong process again"
         )
         assert max(col("memory_mb")) > 1.0, "process memory looks like a shell"
@@ -408,9 +415,23 @@ class TestRealWorkloadMonitoring:
         cpu = [
             float(r["cpu_percent_of_core"]) for r in rows if r["cpu_percent_of_core"]
         ]
-        assert max(cpu) > 20.0, (
+        # Without the instance cache every descendant reads 0.0 on every sample,
+        # and the root here is deliberately idle, so the whole column is zero.
+        # Assert on the *proportion* of samples that registered work rather than
+        # on a level: that separates 0.0-always from working-but-throttled,
+        # which a magnitude threshold cannot do on a shared CI runner.
+        assert max(cpu) > 1.0, (
             "CPU was only counted for the idle root -- descendant Process "
             "instances are not being cached, so their baselines never persist"
+        )
+        # Drop the first sample: it is taken before the child has been primed.
+        # A third, not a half: on a slow runner the child can take a couple of
+        # samples to spawn and be primed. The defect yields zero non-zero
+        # samples, so any non-trivial fraction separates the two cases.
+        working = [c for c in cpu[1:] if c > 0.0]
+        assert len(working) >= len(cpu[1:]) / 3, (
+            f"only {len(working)} of {len(cpu[1:])} samples registered child CPU; "
+            f"descendant baselines are not persisting across samples"
         )
         procs = [int(r["num_processes"]) for r in rows if r["num_processes"]]
         assert max(procs) >= 2, "the child process was never tracked"
