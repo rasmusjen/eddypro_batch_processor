@@ -1,5 +1,7 @@
 """Tests for core module functionality."""
 
+import logging
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -7,6 +9,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from eddypro_batch_processor import core
 from eddypro_batch_processor.core import (
     EddyProBatchProcessor,
     load_config,
@@ -317,3 +320,52 @@ class TestRunEddyProWithMonitoring:
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+class TestSubprocessOutputEchoing:
+    """EddyPro output must reach the console exactly once.
+
+    `setup_logging` always attaches a stdout StreamHandler, so when `log_output`
+    is on the logger already puts each line on the console. Printing as well
+    emitted everything twice, doubling log-file size and halving the interval
+    between rotations on multi-hour runs.
+
+    These assert on `print` rather than on captured log records: the logger is
+    called exactly once either way, so a caplog-based test passes against the
+    bug it is meant to catch.
+    """
+
+    MARKER = "EDDYPRO_MARKER_LINE"
+
+    def _run(self, tmp_path, *, log_output):
+        return core.run_subprocess_with_monitoring(
+            command=[sys.executable, "-c", f"print('{self.MARKER}')"],
+            working_dir=tmp_path,
+            stream_output=True,
+            log_output=log_output,
+            monitoring_enabled=False,
+            output_dir=tmp_path,
+        )
+
+    def test_no_direct_echo_when_the_logger_mirrors_output(self, tmp_path, caplog):
+        """With log_output on, the logger is the single emitter."""
+        with (
+            patch("builtins.print") as mock_print,
+            caplog.at_level(logging.INFO, logger="eddypro_batch_processor.eddypro"),
+        ):
+            assert self._run(tmp_path, log_output=True) == 0
+
+        assert not any(
+            self.MARKER in str(call) for call in mock_print.call_args_list
+        ), "output was printed as well as logged, so each line appears twice"
+        logged = [r for r in caplog.records if self.MARKER in r.getMessage()]
+        assert len(logged) == 1, "the line must still reach the log exactly once"
+
+    def test_direct_echo_survives_when_the_logger_is_silent(self, tmp_path):
+        """With log_output off, printing is the only route to the console."""
+        with patch("builtins.print") as mock_print:
+            assert self._run(tmp_path, log_output=False) == 0
+
+        assert any(
+            self.MARKER in str(call) for call in mock_print.call_args_list
+        ), "live progress was dropped entirely"

@@ -191,12 +191,20 @@ def run_subprocess_with_monitoring(
             if monitor and process.pid:
                 monitor.attach_process(process.pid)
 
-            # Handle output streaming
+            # Handle output streaming.
+            #
+            # `setup_logging` always attaches a stdout StreamHandler, so when
+            # log_output is on the logger already puts every line on the
+            # console. Printing as well emitted each EddyPro line twice, which
+            # doubled console volume and log-file size and halved the interval
+            # between log rotations. Echo directly only when the logger is not
+            # already doing it.
             if stream_output and process.stdout:
                 for line in process.stdout:
-                    print(line, end="")
                     if log_output:
                         output_logger.info(line.rstrip("\n"))
+                    else:
+                        print(line, end="")
                 process.wait()
             else:
                 stdout_data, _ = process.communicate()
