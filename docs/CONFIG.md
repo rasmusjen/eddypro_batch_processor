@@ -76,6 +76,7 @@ The following keys **must** be present in your configuration file:
 | `log_backup_count` | int or null | Number of rotated log files to keep |
 | `log_eddypro_output` | bool | Write EddyPro stdout/stderr to logs |
 | `monitoring_enabled` | bool | Enable/disable performance monitoring (default: `true`) |
+| `cpu_affinity` | str, list[int], or null | Pin the run to specific logical CPUs (default: `null`, no pinning) |
 
 ## Configuration Details
 
@@ -411,6 +412,51 @@ monitoring_enabled: false
 
 ---
 
+### cpu_affinity
+
+**Type:** String, list of integers, or null
+
+**Default:** `null` (leave scheduling to the OS)
+
+**Description:** Restricts the run -- and every process it launches, since child
+processes inherit affinity -- to a set of logical CPUs.
+
+**Values:**
+
+| Value | Meaning |
+|-------|---------|
+| `null` | No pinning |
+| `performance` | Auto-detect the performance cores and pin to them |
+| `[0, 1, 2, ...]` | Pin to these logical CPU indices |
+
+**Why:** Intel hybrid CPUs (12th generation and later) mix performance cores
+with efficiency cores, and the OS will park a long-running background job on the
+efficiency ones. `eddypro_rp` is single-threaded, so this costs roughly a factor
+of two. Measured on an i7-12700K, one year of 10 Hz data:
+
+| | Wall time | CPU % of one core |
+|---|---|---|
+| Pinned to performance cores | 241 s, 241 s | 102.6% |
+| Unpinned | 474 s, 501 s | 96.5-97.8% |
+
+Note the second column: **CPU utilisation is identical**. A demoted run looks
+healthy in the bottleneck report. Pinning also removes the variance -- the
+pinned runs agreed exactly, the unpinned pair differed by 5.7%.
+
+**Auto-detection:** `performance` derives the split from the core counts.
+Performance cores carry two hardware threads and efficiency cores carry one, so
+`p_cores = logical - physical`, occupying logical indices `0 .. 2*p_cores-1`.
+Where that cannot be determined -- no SMT, or no efficiency cores -- affinity is
+left unchanged and a message is logged. On a CPU without efficiency cores there
+is nothing to gain, so this is the correct outcome rather than a failure.
+
+**Never fatal:** an unrecognised value is logged and ignored. A failed
+optimisation must not stop a multi-hour run.
+
+**CLI Override:** none -- config only.
+
+---
+
 ### performance_thresholds
 
 **Type:** Mapping (optional)
@@ -426,14 +472,21 @@ SATA default and a genuinely saturated disk is never flagged at all.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `cpu_high_percent` | 90 | At or above this sustained (p95) CPU, status is RED |
+| `cpu_high_percent` | 90 | At or above this sustained (p95) **machine-wide** CPU, status is RED |
 | `cpu_moderate_percent` | 70 | At or above this, status is YELLOW |
 | `cpu_idle_percent` | 40 | Below this, a busy disk is read as the limiting factor |
+| `single_core_bound_percent` | 95 | Applied to `cpu_percent_of_core`, where 100 = one core fully busy. At or above this, the run is reported `CPU_SINGLE_CORE` |
 | `memory_high_percent` | 85 | System memory use that counts as RED |
 | `memory_moderate_percent` | 70 | System memory use that counts as YELLOW |
 | `disk_high_mb_per_s` | 450 | Combined read+write throughput counting as RED |
 | `disk_moderate_mb_per_s` | 250 | Throughput counting as YELLOW |
 | `disk_high_iops` | 20000 | Combined IOPS above which latency is the suspect |
+
+The CPU verdict is judged on `system_cpu_percent` (machine-wide). Each parallel
+worker runs its own monitor and sees only its own process tree, so per-process
+CPU can never reveal that the machine as a whole is full. Files written by a
+monitor that did not record the system column fall back to the normalised
+process figure.
 
 Unknown keys are ignored, so a config written for a newer version still loads.
 

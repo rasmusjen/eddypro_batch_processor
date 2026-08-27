@@ -718,19 +718,28 @@ def generate_html_report(
         <table>
             <tr>
                 <th>Run</th><th>CPU</th><th>Memory</th><th>Disk</th>
-                <th>Bottleneck</th><th>CPU p95</th><th>Peak RAM (MB)</th>
+                <th>Bottleneck</th><th>CPU p95 (machine)</th>
+                <th>CPU p95 (% of 1 core)</th><th>s / work item</th>
+                <th>Peak RAM (MB)</th>
                 <th>Read (MB)</th><th>Write (MB)</th>
             </tr>
 """)
         for entry in perf_entries:
             cpu = entry.get("cpu", {}) or {}
+            # Machine-wide where recorded; the normalised process figure is a
+            # fraction of the whole machine and reads as near-zero on its own.
+            sys_cpu = entry.get("system_cpu_percent", {}) or {}
+            core_cpu = entry.get("cpu_percent_of_core", {}) or {}
+            machine_p95 = sys_cpu.get("p95") or cpu.get("p95", 0)
             html_parts.append(f"""            <tr>
                 <td>{entry.get("scenario_name", "?")}</td>
                 <td>{_dot(entry.get("cpu_status", "UNKNOWN"))}</td>
                 <td>{_dot(entry.get("memory_status", "UNKNOWN"))}</td>
                 <td>{_dot(entry.get("disk_status", "UNKNOWN"))}</td>
                 <td><strong>{entry.get("primary_bottleneck", "?")}</strong></td>
-                <td>{cpu.get("p95", 0):.1f}%</td>
+                <td>{machine_p95:.1f}%</td>
+                <td>{core_cpu.get("p95", 0):.0f}%</td>
+                <td>{entry.get("mean_seconds_per_work_item", 0) or 0:.2f}</td>
                 <td>{entry.get("peak_memory_mb", 0):.0f}</td>
                 <td>{entry.get("total_read_mb", 0):.0f}</td>
                 <td>{entry.get("total_write_mb", 0):.0f}</td>

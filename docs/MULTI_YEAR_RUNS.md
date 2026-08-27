@@ -153,16 +153,66 @@ decide whether `max_processes` is set well:
 
 | Classification | What it means | What to do |
 |---|---|---|
-| CPU | Workers are compute-bound; cores are the limit | Lower `max_processes` toward the physical core count if you see thrashing; otherwise this is healthy utilization |
+| CPU | The **machine** is compute-bound; cores are the limit | Lower `max_processes` toward the physical core count if you see thrashing; otherwise this is healthy utilization |
+| CPU_SINGLE_CORE | EddyPro is pegging one core while the machine sits idle. This is the normal state for a single-year run, because `eddypro_rp` is largely single-threaded | Raise `max_processes` and run more years concurrently. A faster disk will not help |
 | MEMORY | Workers are approaching available RAM | Lower `max_processes`, or process fewer years concurrently |
 | DISK_THROUGHPUT | Aggregate read/write MB/s is saturating the disk | Lower `max_processes`, or move input/output to faster storage (SSD/NVMe) |
 | DISK_IOPS | Many small reads/writes are the limit (common with many small raw files) | Move data to faster storage; concatenating raw files can help more than adding workers |
 
-With N years running in parallel, remember that each worker's own CPU% is a
-share of the *whole machine* — a healthy multi-year run with `max_processes:
-6` on an 8-core machine will show each worker around 60-80% CPU, not 100%.
-Read the aggregate/system columns in the metrics CSVs, not just one worker's
-process columns, when deciding whether you're actually CPU-bound.
+The metrics CSV carries three different CPU columns and they answer different
+questions:
+
+| Column | Meaning | Use it for |
+|---|---|---|
+| `cpu_percent_of_core` | 100 = one core fully busy, 200 = two | Is the workload itself pinned by single-thread speed? |
+| `system_cpu_percent` | Machine-wide utilisation | Is the *machine* full? This drives the CPU verdict |
+| `cpu_percent` | The process tree's share of the whole machine | Comparing one worker's footprint against the box |
+
+`cpu_percent` is divided by the logical core count, so on a 20-thread machine a
+single-threaded EddyPro saturating one core reads as ~5%. That is not idleness --
+check `cpu_percent_of_core` before concluding a run was cheap.
+
+## Hybrid CPUs: pin EddyPro to the performance cores
+
+On Intel hybrid CPUs (12th generation and later) the cores are not all equal:
+an i7-12700K has 8 performance cores (logical 0-15) and 4 efficiency cores
+(16-19). Windows will park a long-running background process on the efficiency
+cores, especially while you are using the machine for something else.
+
+`eddypro_rp` is single-threaded, so this costs about a factor of two. Measured
+on a 12700K, one year of 10 Hz data:
+
+| | Wall time | s per flux period | `cpu_percent_of_core` p95 |
+|---|---|---|---|
+| Pinned to P-cores | 241 s, 241 s | 0.70 | 102.6% |
+| Unpinned | 474 s, 501 s | 1.39, 1.47 | 96.5-97.8% |
+
+Note the last column: **CPU utilisation is identical**. A demoted run looks
+perfectly healthy in the bottleneck report -- it is saturating a core, it is
+just a slower core. Only the `work_items_per_s` throughput series reveals it.
+System CPU sat at 17-21% in all four runs, so this is core placement, not
+contention.
+
+Pinning also makes runs reproducible: the two pinned runs agreed exactly, while
+the unpinned pair differed by 5.7%.
+
+Set `cpu_affinity` in the config and the pipeline handles it -- child
+processes inherit affinity, so pinning the launching process covers the workers
+and the EddyPro executables they run:
+
+```yaml
+cpu_affinity: performance    # or an explicit list, e.g. [0, 1, 2, ..., 15]
+```
+
+Auto-detection derives the split from the core counts and logs what it chose.
+On a CPU without efficiency cores there is nothing to gain and affinity is left
+alone. See [CONFIG.md](CONFIG.md#cpu_affinity) for the details.
+
+Check your own topology with:
+
+```powershell
+Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
+```
 
 ## Choosing `max_processes`
 

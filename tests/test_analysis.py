@@ -34,6 +34,8 @@ FIELDNAMES = [
     "read_iops",
     "write_iops",
     "num_processes",
+    "work_items",
+    "work_items_per_s",
     "system_cpu_percent",
     "system_memory_percent",
     "system_memory_used_mb",
@@ -135,6 +137,140 @@ class TestBottleneckClassification:
         assert result.primary_bottleneck == "NONE"
         assert result.cpu_status == "GREEN"
         assert "headroom" in result.explanation.lower()
+
+    def test_single_core_bound_is_detected(self, tmp_path):
+        """The signature of this pipeline: one core pegged, machine mostly idle.
+
+        ``cpu_percent`` is divided by the logical core count, so a single-threaded
+        EddyPro saturating one core of twenty reports ~5% -- far below every CPU
+        threshold. Classifying that as "no bottleneck" hides the one finding that
+        matters, namely that the cores are there but unused.
+        """
+        csv_path = make_series(
+            tmp_path / "metrics.csv",
+            cpu_percent=5.0,
+            cpu_percent_of_core=100.0,
+            system_cpu_percent=23.0,
+            system_memory_percent=40.0,
+            read_mb_per_s=3.0,
+        )
+        result = BottleneckAnalyzer().analyze(csv_path)
+        assert result.primary_bottleneck == "CPU_SINGLE_CORE"
+        assert "max_processes" in result.explanation
+        assert result.cpu_percent_of_core.p95 == pytest.approx(100.0)
+        assert result.system_cpu_percent.p95 == pytest.approx(23.0)
+
+    def test_machine_saturation_uses_the_system_column(self, tmp_path):
+        """With N workers, each monitor sees only its own tree.
+
+        Per-process CPU therefore cannot reveal a full machine; the system-wide
+        column must drive the RED verdict, and it must outrank single-core.
+        """
+        csv_path = make_series(
+            tmp_path / "metrics.csv",
+            cpu_percent=5.0,
+            cpu_percent_of_core=100.0,
+            system_cpu_percent=95.0,
+            system_memory_percent=40.0,
+        )
+        result = BottleneckAnalyzer().analyze(csv_path)
+        assert result.primary_bottleneck == "CPU"
+        assert result.cpu_status == "RED"
+
+    def test_single_core_does_not_mask_a_disk_bottleneck(self, tmp_path):
+        """A saturated disk with an idle machine still outranks single-core."""
+        csv_path = make_series(
+            tmp_path / "metrics.csv",
+            cpu_percent=5.0,
+            cpu_percent_of_core=100.0,
+            system_cpu_percent=10.0,
+            system_memory_percent=40.0,
+            read_mb_per_s=400.0,
+            write_mb_per_s=200.0,
+        )
+        assert (
+            BottleneckAnalyzer().analyze(csv_path).primary_bottleneck
+            == "DISK_THROUGHPUT"
+        )
+
+    def test_idle_single_threaded_run_is_not_single_core_bound(self, tmp_path):
+        """A process using half a core is not pinned by single-thread speed."""
+        csv_path = make_series(
+            tmp_path / "metrics.csv",
+            cpu_percent=2.5,
+            cpu_percent_of_core=50.0,
+            system_cpu_percent=12.0,
+            system_memory_percent=40.0,
+        )
+        assert BottleneckAnalyzer().analyze(csv_path).primary_bottleneck == "NONE"
+
+    def test_single_core_threshold_is_tunable(self, tmp_path):
+        csv_path = make_series(
+            tmp_path / "metrics.csv",
+            cpu_percent=5.0,
+            cpu_percent_of_core=80.0,
+            system_cpu_percent=20.0,
+            system_memory_percent=40.0,
+        )
+        assert BottleneckAnalyzer().analyze(csv_path).primary_bottleneck == "NONE"
+        relaxed = BottleneckAnalyzer({"single_core_bound_percent": 75.0})
+        assert relaxed.analyze(csv_path).primary_bottleneck == "CPU_SINGLE_CORE"
+
+    def test_throughput_is_recorded_alongside_cpu(self, tmp_path):
+        """Two runs can look identical on CPU yet differ in work done.
+
+        On a hybrid P-core/E-core CPU, a run demoted onto an efficiency core
+        still reports ~100% of a core while delivering roughly half the
+        throughput. Without a work-rate series there is no signal at all that
+        this happened.
+        """
+        fast = write_metrics(
+            tmp_path / "fast.csv",
+            [
+                {
+                    "cpu_percent_of_core": 100.0,
+                    "system_cpu_percent": 20.0,
+                    "work_items": i * 2,
+                    "work_items_per_s": 2.0,
+                }
+                for i in range(20)
+            ],
+        )
+        slow = write_metrics(
+            tmp_path / "slow.csv",
+            [
+                {
+                    "cpu_percent_of_core": 100.0,
+                    "system_cpu_percent": 20.0,
+                    "work_items": i,
+                    "work_items_per_s": 1.0,
+                }
+                for i in range(20)
+            ],
+        )
+        a = BottleneckAnalyzer()
+        f, s_ = a.analyze(fast), a.analyze(slow)
+
+        # Indistinguishable on CPU ...
+        assert f.cpu_percent_of_core.p95 == s_.cpu_percent_of_core.p95
+        assert f.primary_bottleneck == s_.primary_bottleneck == "CPU_SINGLE_CORE"
+        # ... but the throughput series separates them.
+        assert f.work_items_per_s.p95 == pytest.approx(2.0)
+        assert s_.work_items_per_s.p95 == pytest.approx(1.0)
+        assert f.mean_seconds_per_work_item < s_.mean_seconds_per_work_item
+
+    def test_throughput_absent_is_not_an_error(self, tmp_path):
+        """Runs with no progress directory must still classify cleanly."""
+        csv_path = make_series(
+            tmp_path / "metrics.csv",
+            cpu_percent=5.0,
+            cpu_percent_of_core=100.0,
+            system_cpu_percent=20.0,
+        )
+        result = BottleneckAnalyzer().analyze(csv_path)
+        assert result.primary_bottleneck == "CPU_SINGLE_CORE"
+        assert result.total_work_items == 0.0
+        assert result.mean_seconds_per_work_item == 0.0
 
     def test_cpu_takes_priority_over_disk(self, tmp_path):
         # A saturated CPU outranks a busy disk: the CPU is the binding limit.

@@ -22,7 +22,15 @@ from typing import Any, Literal, TypedDict
 logger = logging.getLogger(__name__)
 
 Status = Literal["GREEN", "YELLOW", "RED", "UNKNOWN"]
-Bottleneck = Literal["CPU", "MEMORY", "DISK_THROUGHPUT", "DISK_IOPS", "NONE", "UNKNOWN"]
+Bottleneck = Literal[
+    "CPU",
+    "CPU_SINGLE_CORE",
+    "MEMORY",
+    "DISK_THROUGHPUT",
+    "DISK_IOPS",
+    "NONE",
+    "UNKNOWN",
+]
 
 
 class PerformanceThresholds(TypedDict, total=False):
@@ -31,6 +39,7 @@ class PerformanceThresholds(TypedDict, total=False):
     cpu_high_percent: float
     cpu_moderate_percent: float
     cpu_idle_percent: float
+    single_core_bound_percent: float
     memory_high_percent: float
     memory_moderate_percent: float
     disk_high_mb_per_s: float
@@ -44,6 +53,10 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     # Below this, the CPU is considered idle enough that a high I/O rate is
     # evidence the run was waiting on the disk rather than computing.
     "cpu_idle_percent": 40.0,
+    # Applied to cpu_percent_of_core, where 100 means "one core fully busy".
+    # EddyPro is largely single-threaded, so a run pegged at ~100 is limited by
+    # single-thread speed no matter how many cores the machine has.
+    "single_core_bound_percent": 95.0,
     "memory_high_percent": 85.0,
     "memory_moderate_percent": 70.0,
     # Calibrated for a SATA SSD (~550 MB/s sequential), which is the common
@@ -85,15 +98,26 @@ class ScenarioAnalysis:
     duration_seconds: float = 0.0
 
     cpu: MetricStats = field(default_factory=MetricStats)
+    # Un-normalised: 100 means one core fully busy, 200 two, and so on. This is
+    # the column that reveals single-thread saturation on a many-core machine,
+    # which `cpu` (divided by the core count) hides.
+    cpu_percent_of_core: MetricStats = field(default_factory=MetricStats)
+    system_cpu_percent: MetricStats = field(default_factory=MetricStats)
     memory_mb: MetricStats = field(default_factory=MetricStats)
     system_memory_percent: MetricStats = field(default_factory=MetricStats)
     read_mb_per_s: MetricStats = field(default_factory=MetricStats)
     write_mb_per_s: MetricStats = field(default_factory=MetricStats)
     read_iops: MetricStats = field(default_factory=MetricStats)
     write_iops: MetricStats = field(default_factory=MetricStats)
+    # Work completed per second. CPU cannot distinguish a saturated fast core
+    # from a saturated slow one, so throughput is what exposes a run that was
+    # demoted onto an efficiency core: identical CPU, half the work done.
+    work_items_per_s: MetricStats = field(default_factory=MetricStats)
 
     total_read_mb: float = 0.0
     total_write_mb: float = 0.0
+    total_work_items: float = 0.0
+    mean_seconds_per_work_item: float = 0.0
     peak_memory_mb: float = 0.0
 
     cpu_status: Status = "UNKNOWN"
@@ -204,12 +228,16 @@ class BottleneckAnalyzer:
             return [v for v in (_to_float(r.get(key)) for r in rows) if v is not None]
 
         cpu = series("cpu_percent")
+        cpu_of_core = series("cpu_percent_of_core")
+        sys_cpu = series("system_cpu_percent")
         memory = series("memory_mb")
         sys_mem = series("system_memory_percent")
         read_rate = series("read_mb_per_s")
         write_rate = series("write_mb_per_s")
         read_iops = series("read_iops")
         write_iops = series("write_iops")
+        work_rate = series("work_items_per_s")
+        work_total = series("work_items")
         read_total = series("read_mb")
         write_total = series("write_mb")
         rel_time = series("relative_time")
@@ -219,16 +247,25 @@ class BottleneckAnalyzer:
             sample_count=len(rows),
             duration_seconds=round(rel_time[-1], 2) if rel_time else 0.0,
             cpu=_stats(cpu),
+            cpu_percent_of_core=_stats(cpu_of_core),
+            system_cpu_percent=_stats(sys_cpu),
             memory_mb=_stats(memory),
             system_memory_percent=_stats(sys_mem),
             read_mb_per_s=_stats(read_rate),
             write_mb_per_s=_stats(write_rate),
             read_iops=_stats(read_iops),
             write_iops=_stats(write_iops),
+            work_items_per_s=_stats(work_rate),
+            total_work_items=round(work_total[-1], 0) if work_total else 0.0,
             total_read_mb=round(read_total[-1], 3) if read_total else 0.0,
             total_write_mb=round(write_total[-1], 3) if write_total else 0.0,
             peak_memory_mb=round(max(memory), 3) if memory else 0.0,
         )
+
+        if analysis.total_work_items > 0 and analysis.duration_seconds > 0:
+            analysis.mean_seconds_per_work_item = round(
+                analysis.duration_seconds / analysis.total_work_items, 3
+            )
 
         self._classify(analysis)
         return analysis
@@ -252,8 +289,17 @@ class BottleneckAnalyzer:
         t = self.thresholds
 
         # CPU: judged on sustained load, so p95 rather than the peak.
+        #
+        # Machine-level saturation must come from the system-wide column. Each
+        # parallel worker runs its own monitor and sees only its own process
+        # tree, so per-process CPU can never reveal that the *machine* is full.
+        # Fall back to the normalised process figure when the system column is
+        # absent, which keeps files from older monitors classifiable.
+        machine_cpu = (
+            a.system_cpu_percent.p95 if a.system_cpu_percent.max > 0 else a.cpu.p95
+        )
         a.cpu_status = self._level(
-            a.cpu.p95, t["cpu_moderate_percent"], t["cpu_high_percent"]
+            machine_cpu, t["cpu_moderate_percent"], t["cpu_high_percent"]
         )
 
         # Memory: system-wide pressure matters more than the process footprint,
@@ -274,16 +320,16 @@ class BottleneckAnalyzer:
         disk_by_iops = "RED" if total_iops > t["disk_high_iops"] else "GREEN"
         a.disk_status = "RED" if "RED" in (disk_by_rate, disk_by_iops) else disk_by_rate
 
-        cpu_idle = a.cpu.p95 < t["cpu_idle_percent"]
+        cpu_idle = machine_cpu < t["cpu_idle_percent"]
 
         # Priority: saturated CPU is the clearest signal. Otherwise a busy disk
         # paired with an idle CPU means the run was waiting on I/O.
         if a.cpu_status == "RED":
             a.primary_bottleneck = "CPU"
             a.explanation = (
-                f"CPU saturated: sustained (p95) utilisation {a.cpu.p95:.1f}%. "
-                f"Processing is compute-bound; more parallel years will not help "
-                f"unless spare cores are available."
+                f"CPU saturated: sustained (p95) machine-wide utilisation "
+                f"{machine_cpu:.1f}%. Processing is compute-bound; more parallel "
+                f"years will not help unless spare cores are available."
             )
         elif a.memory_status == "RED":
             a.primary_bottleneck = "MEMORY"
@@ -296,26 +342,40 @@ class BottleneckAnalyzer:
             a.primary_bottleneck = "DISK_THROUGHPUT"
             a.explanation = (
                 f"Disk-bound: {disk_rate:.1f} MB/s sustained while the CPU sat at "
-                f"{a.cpu.p95:.1f}%. The run is waiting on storage -- move the data "
+                f"{machine_cpu:.1f}%. The run is waiting on storage -- move the data "
                 f"to a faster disk before adding parallelism."
             )
         elif cpu_idle and disk_by_iops == "RED":
             a.primary_bottleneck = "DISK_IOPS"
             a.explanation = (
                 f"Disk-bound on latency: {total_iops:.0f} IOPS (p95) with the CPU at "
-                f"{a.cpu.p95:.1f}%. Many small reads -- typical of raw files split "
+                f"{machine_cpu:.1f}%. Many small reads -- typical of raw files split "
                 f"into short intervals."
+            )
+        elif a.cpu_percent_of_core.p95 >= t["single_core_bound_percent"]:
+            # The machine has spare capacity but the workload itself is pinned to
+            # a core. Adding workers is the fix; a faster disk is not.
+            a.primary_bottleneck = "CPU_SINGLE_CORE"
+            cores_busy = a.cpu_percent_of_core.p95 / 100.0
+            a.explanation = (
+                f"Single-core bound: the EddyPro process tree sustained "
+                f"{a.cpu_percent_of_core.p95:.0f}% of one core "
+                f"({cores_busy:.1f} core(s) busy) while the machine as a whole sat "
+                f"at {machine_cpu:.1f}%. EddyPro is largely single-threaded, so a "
+                f"faster disk will not help -- run more years concurrently "
+                f"(raise max_processes) to use the idle cores."
             )
         elif a.cpu_status == "YELLOW":
             a.primary_bottleneck = "CPU"
             a.explanation = (
-                f"Moderately CPU-bound: sustained utilisation {a.cpu.p95:.1f}%. "
-                f"Some headroom remains."
+                f"Moderately CPU-bound: sustained machine-wide utilisation "
+                f"{machine_cpu:.1f}%. Some headroom remains."
             )
         else:
             a.primary_bottleneck = "NONE"
             a.explanation = (
-                f"No clear bottleneck: CPU {a.cpu.p95:.1f}% (p95), disk "
+                f"No clear bottleneck: CPU {machine_cpu:.1f}% (p95) machine-wide, "
+                f"{a.cpu_percent_of_core.p95:.0f}% of one core, disk "
                 f"{disk_rate:.1f} MB/s, peak memory {a.peak_memory_mb:.0f} MB. "
                 f"There is headroom to increase max_processes."
             )

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
+import psutil
 import yaml
 
 from . import analysis, ecmd, ini_tools, report
@@ -137,6 +138,92 @@ class EddyProBatchProcessor:
         logging.info("Configuration validation passed.")
 
 
+def resolve_performance_cores() -> list[int] | None:
+    """Best-effort logical CPU indices of the performance cores.
+
+    Intel hybrid CPUs (12th generation and later) mix performance cores, which
+    carry two hardware threads each, with efficiency cores, which carry one. So
+    given L logical and P physical cores::
+
+        p_cores * 2 + e_cores     == L
+        p_cores     + e_cores     == P
+
+    which solves to ``p_cores = L - P``. Their logical indices are ``0 ..
+    2*p_cores - 1`` under the standard Windows enumeration, where P-core threads
+    are numbered first.
+
+    Returns None when the split cannot be determined -- no hyper-threading, no
+    efficiency cores, or an unexpected topology -- in which case the caller
+    should leave affinity alone rather than guess.
+    """
+    try:
+        logical = psutil.cpu_count(logical=True)
+        physical = psutil.cpu_count(logical=False)
+    except Exception:
+        return None
+    if not logical or not physical or logical <= physical:
+        return None  # no SMT, so P-cores and E-cores are indistinguishable here
+
+    p_cores = logical - physical
+    e_cores = physical - p_cores
+    if p_cores <= 0 or e_cores <= 0:
+        return None  # uniform SMT topology: every core is a performance core
+    return list(range(2 * p_cores))
+
+
+def apply_cpu_affinity(config: dict[str, Any]) -> None:
+    """Pin this process (and therefore its children) per ``cpu_affinity``.
+
+    Child processes inherit affinity, so setting it once here covers the
+    ProcessPoolExecutor workers and the EddyPro executables they launch.
+
+    Why this exists: ``eddypro_rp`` is single-threaded, and Windows will park a
+    long-running background process on the efficiency cores. Measured on a
+    12700K, the same year of data took 241 s pinned to the performance cores and
+    474-501 s unpinned -- while CPU utilisation read 96-103% of a core either
+    way, so nothing in the metrics revealed the loss.
+
+    Accepts ``"performance"`` for auto-detection, an explicit list of logical CPU
+    indices, or null/absent to leave affinity untouched. Never fatal: a bad value
+    is logged and ignored, because a failed optimisation must not stop a run.
+    """
+    setting = config.get("cpu_affinity")
+    if setting is None or setting is False:
+        return
+
+    if isinstance(setting, str):
+        if setting.lower() != "performance":
+            logging.warning(
+                f"Unknown cpu_affinity value {setting!r}; expected 'performance', "
+                f"a list of CPU indices, or null. Leaving affinity unchanged."
+            )
+            return
+        cores = resolve_performance_cores()
+        if not cores:
+            logging.info(
+                "cpu_affinity: 'performance' requested but this CPU has no "
+                "detectable performance/efficiency split; leaving affinity unchanged."
+            )
+            return
+    elif isinstance(setting, list) and all(isinstance(c, int) for c in setting):
+        cores = setting
+    else:
+        logging.warning(
+            f"Invalid cpu_affinity value {setting!r}; leaving affinity unchanged."
+        )
+        return
+
+    try:
+        proc = psutil.Process()
+        proc.cpu_affinity(cores)
+        logging.info(
+            f"Pinned to {len(cores)} logical CPU(s): {cores[0]}-{cores[-1]}. "
+            f"Child processes inherit this."
+        )
+    except Exception as e:
+        logging.warning(f"Could not set CPU affinity to {cores}: {e}")
+
+
 def run_subprocess_with_monitoring(
     command: list[str],
     working_dir: Path,
@@ -146,6 +233,7 @@ def run_subprocess_with_monitoring(
     scenario_suffix: str = "",
     log_output: bool = True,
     monitoring_enabled: bool = True,
+    progress_dir: Path | None = None,
 ) -> int:
     """
     Execute a subprocess command with performance monitoring.
@@ -165,6 +253,8 @@ def run_subprocess_with_monitoring(
         log_output: Whether to mirror subprocess output into the log
         monitoring_enabled: When False, no monitor is started and no metrics files
             are written
+        progress_dir: Optional directory whose file count proxies work completed,
+            recorded as a throughput series alongside CPU
 
     Returns:
         Subprocess return code, or -1 if an exception occurs
@@ -178,6 +268,7 @@ def run_subprocess_with_monitoring(
             output_dir=metrics_output_dir,
             scenario_suffix=scenario_suffix,
             enabled=monitoring_enabled,
+            progress_dir=progress_dir,
         ) as monitor:
             process = subprocess.Popen(  # nosec B603
                 command,
@@ -191,12 +282,20 @@ def run_subprocess_with_monitoring(
             if monitor and process.pid:
                 monitor.attach_process(process.pid)
 
-            # Handle output streaming
+            # Handle output streaming.
+            #
+            # `setup_logging` always attaches a stdout StreamHandler, so when
+            # log_output is on the logger already puts every line on the
+            # console. Printing as well emitted each EddyPro line twice, which
+            # doubled console volume and log-file size and halved the interval
+            # between log rotations. Echo directly only when the logger is not
+            # already doing it.
             if stream_output and process.stdout:
                 for line in process.stdout:
-                    print(line, end="")
                     if log_output:
                         output_logger.info(line.rstrip("\n"))
+                    else:
+                        print(line, end="")
                 process.wait()
             else:
                 stdout_data, _ = process.communicate()
@@ -289,6 +388,10 @@ def run_eddypro_with_monitoring(
         scenario_suffix=f"{scenario_suffix}_rp" if scenario_suffix else "rp",
         log_output=log_output,
         monitoring_enabled=monitoring_enabled,
+        # One binned-cospectra file per flux averaging period, so counting them
+        # measures periods completed. Throughput is the only signal that tells a
+        # saturated fast core from a saturated slow one.
+        progress_dir=output_dir / "eddypro_binned_cospectra",
     )
     if rp_return_code != 0:
         logging.error(f"eddypro_rp failed with return code {rp_return_code}")

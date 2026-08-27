@@ -7,7 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`cpu_affinity` config option.** Pins the run, its worker processes and the
+  EddyPro executables to a chosen set of logical CPUs. Accepts `performance`
+  for auto-detection, an explicit list of CPU indices, or null (the default,
+  unchanged behaviour).
+
+  On Intel hybrid CPUs the OS parks long-running background work on the
+  efficiency cores. `eddypro_rp` is single-threaded, so measured on an i7-12700K
+  one year of 10 Hz data took 241 s pinned to the performance cores against
+  474-501 s unpinned -- roughly a factor of two, invisible to CPU monitoring
+  because a saturated efficiency core reports the same ~100% of a core as a
+  saturated performance one. Pinning also removed the run-to-run variance
+  entirely. Auto-detection leaves affinity alone on CPUs with no such split, and
+  an unrecognised value is logged and ignored rather than failing the run.
+
+- **Throughput signal in the performance monitor.** The monitor can now count
+  completed work items and record `work_items` and `work_items_per_s` alongside
+  the CPU and disk series; the analyser derives `mean_seconds_per_work_item` and
+  the HTML report shows it. `run` points this at the binned-cospectra directory,
+  which EddyPro fills one file per flux averaging period.
+
+  This exists because CPU utilisation cannot distinguish a saturated fast core
+  from a saturated slow one. On Intel hybrid CPUs (12th gen and later) Windows
+  will park a long-running background process on the efficiency cores; measured
+  on a 12700K, the same workload took 241 s pinned to P-cores and 474-501 s
+  unpinned, while `cpu_percent_of_core` read 96-103% in *every* case. Without a
+  work-rate series there is no signal at all that half the machine's performance
+  is missing. Opt-in via `progress_dir`; runs without one are unaffected.
+
 ### Fixed
+
+- **The bottleneck analyser could not detect a CPU bottleneck.** `monitor.py`
+  divides process-tree CPU by the logical core count before writing
+  `cpu_percent`, so a single-threaded EddyPro saturating one core of twenty
+  recorded ~5% -- far below the 70/90% thresholds the classifier compared it
+  against. Every run was therefore reported as `NONE: no clear bottleneck ...
+  headroom to increase max_processes`, which was the right advice only by
+  coincidence and would have read identically on a fully saturated machine.
+  Confirmed against a real 7-day run whose `eddypro_rp` phase sustained 100.3%
+  of one core (p95) while `cpu_percent` read 5.0%. The classifier now:
+  - judges machine-level saturation on `system_cpu_percent`, because each
+    parallel worker's monitor only ever sees its own process tree and so can
+    never observe that the machine as a whole is full;
+  - adds a `CPU_SINGLE_CORE` verdict driven by `cpu_percent_of_core`, naming
+    the case where the workload is pinned by single-thread speed while cores
+    sit idle -- the normal state for `eddypro_rp`, and the one that actually
+    justifies raising `max_processes`;
+  - falls back to the old normalised figure when `system_cpu_percent` is
+    absent, so older metrics files stay classifiable.
+
+  The new `single_core_bound_percent` threshold (default 95) is tunable via
+  `performance_thresholds`. The HTML report now shows machine-wide CPU and
+  percent-of-one-core as separate columns, instead of a single normalised
+  figure that reads as near-zero for any single-threaded run.
 
 - **Monitor reported 0.0% CPU for every child process.** psutil records the
   CPU-times baseline on the `Process` *instance*, and `children(recursive=True)`
@@ -17,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than the launched process — a Windows venv `python.exe` shim, or
   EddyPro spawning workers — which produced exactly the all-zero CPU column the
   process-tree fix was meant to eliminate.
+
+- **EddyPro output was written to the console twice.** `setup_logging` always
+  attaches a stdout `StreamHandler`, so with both `stream_output: true` and
+  `log_eddypro_output: true` -- the shipped defaults -- the streaming loop's
+  `print()` duplicated every line the logger had already emitted. This doubled
+  console volume and log-file size and halved the interval between log
+  rotations on multi-hour runs. The direct echo is now used only when the
+  logger is not already mirroring the output, so live progress still works with
+  `log_eddypro_output: false`.
 
 - **`eddypro-batch` with no subcommand printed a config error instead of
   help.** `main()` validated the config file before dispatching, so on a fresh

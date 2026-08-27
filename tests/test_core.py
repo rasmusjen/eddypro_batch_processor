@@ -1,5 +1,7 @@
 """Tests for core module functionality."""
 
+import logging
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -7,6 +9,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from eddypro_batch_processor import core
 from eddypro_batch_processor.core import (
     EddyProBatchProcessor,
     load_config,
@@ -317,3 +320,118 @@ class TestRunEddyProWithMonitoring:
 
 if __name__ == "__main__":
     pytest.main([__file__])
+
+
+class TestSubprocessOutputEchoing:
+    """EddyPro output must reach the console exactly once.
+
+    `setup_logging` always attaches a stdout StreamHandler, so when `log_output`
+    is on the logger already puts each line on the console. Printing as well
+    emitted everything twice, doubling log-file size and halving the interval
+    between rotations on multi-hour runs.
+
+    These assert on `print` rather than on captured log records: the logger is
+    called exactly once either way, so a caplog-based test passes against the
+    bug it is meant to catch.
+    """
+
+    MARKER = "EDDYPRO_MARKER_LINE"
+
+    def _run(self, tmp_path, *, log_output):
+        return core.run_subprocess_with_monitoring(
+            command=[sys.executable, "-c", f"print('{self.MARKER}')"],
+            working_dir=tmp_path,
+            stream_output=True,
+            log_output=log_output,
+            monitoring_enabled=False,
+            output_dir=tmp_path,
+        )
+
+    def test_no_direct_echo_when_the_logger_mirrors_output(self, tmp_path, caplog):
+        """With log_output on, the logger is the single emitter."""
+        with (
+            patch("builtins.print") as mock_print,
+            caplog.at_level(logging.INFO, logger="eddypro_batch_processor.eddypro"),
+        ):
+            assert self._run(tmp_path, log_output=True) == 0
+
+        assert not any(
+            self.MARKER in str(call) for call in mock_print.call_args_list
+        ), "output was printed as well as logged, so each line appears twice"
+        logged = [r for r in caplog.records if self.MARKER in r.getMessage()]
+        assert len(logged) == 1, "the line must still reach the log exactly once"
+
+    def test_direct_echo_survives_when_the_logger_is_silent(self, tmp_path):
+        """With log_output off, printing is the only route to the console."""
+        with patch("builtins.print") as mock_print:
+            assert self._run(tmp_path, log_output=False) == 0
+
+        assert any(
+            self.MARKER in str(call) for call in mock_print.call_args_list
+        ), "live progress was dropped entirely"
+
+
+class TestCpuAffinity:
+    """Pinning is an optimisation, so a bad value must never stop a run."""
+
+    def test_performance_cores_derived_from_core_counts(self):
+        """8 P-cores (2 threads each) + 4 E-cores = 20 logical / 12 physical."""
+        with (patch("eddypro_batch_processor.core.psutil.cpu_count") as cpu_count,):
+            cpu_count.side_effect = lambda logical=True: 20 if logical else 12
+            assert core.resolve_performance_cores() == list(range(16))
+
+    def test_no_hybrid_split_returns_none(self):
+        """A uniform SMT CPU (8 cores / 16 threads) has no E-cores to avoid."""
+        with patch("eddypro_batch_processor.core.psutil.cpu_count") as cpu_count:
+            cpu_count.side_effect = lambda logical=True: 16 if logical else 8
+            assert core.resolve_performance_cores() is None
+
+    def test_no_smt_returns_none(self):
+        """Without SMT the thread-count trick cannot identify core types."""
+        with patch("eddypro_batch_processor.core.psutil.cpu_count") as cpu_count:
+            cpu_count.side_effect = lambda logical=True: 8
+            assert core.resolve_performance_cores() is None
+
+    def test_absent_setting_leaves_affinity_untouched(self):
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            core.apply_cpu_affinity({})
+            proc.assert_not_called()
+
+    def test_explicit_list_is_applied(self):
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            core.apply_cpu_affinity({"cpu_affinity": [0, 1, 2, 3]})
+            proc.return_value.cpu_affinity.assert_called_once_with([0, 1, 2, 3])
+
+    def test_performance_keyword_uses_detection(self):
+        with (
+            patch("eddypro_batch_processor.core.psutil.Process") as proc,
+            patch(
+                "eddypro_batch_processor.core.resolve_performance_cores",
+                return_value=[0, 1],
+            ),
+        ):
+            core.apply_cpu_affinity({"cpu_affinity": "performance"})
+            proc.return_value.cpu_affinity.assert_called_once_with([0, 1])
+
+    def test_performance_keyword_no_split_is_a_no_op(self):
+        with (
+            patch("eddypro_batch_processor.core.psutil.Process") as proc,
+            patch(
+                "eddypro_batch_processor.core.resolve_performance_cores",
+                return_value=None,
+            ),
+        ):
+            core.apply_cpu_affinity({"cpu_affinity": "performance"})
+            proc.return_value.cpu_affinity.assert_not_called()
+
+    def test_garbage_value_is_ignored_not_raised(self):
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            core.apply_cpu_affinity({"cpu_affinity": "wibble"})
+            core.apply_cpu_affinity({"cpu_affinity": {"a": 1}})
+            proc.return_value.cpu_affinity.assert_not_called()
+
+    def test_failure_to_pin_does_not_abort_the_run(self):
+        """A multi-hour run must not die because affinity could not be set."""
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            proc.return_value.cpu_affinity.side_effect = OSError("denied")
+            core.apply_cpu_affinity({"cpu_affinity": [0, 1]})  # must not raise

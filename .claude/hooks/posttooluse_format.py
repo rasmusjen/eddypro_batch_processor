@@ -13,6 +13,34 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
+
+
+def project_python() -> str:
+    """Interpreter that actually has black and ruff installed.
+
+    The hook itself may be run by any interpreter -- typically the system
+    Python, which has no dev tooling. Prefer the project virtualenv so the
+    formatters are found; fall back to whatever is running us.
+    """
+    root = Path(__file__).resolve().parents[2]
+    for candidate in (
+        root / ".venv" / "Scripts" / "python.exe",  # Windows
+        root / ".venv" / "bin" / "python",  # POSIX
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return sys.executable
+
+
+def missing_module(result: subprocess.CompletedProcess) -> bool:
+    """True when the interpreter ran but the tool is not installed.
+
+    `python -m ruff` with ruff absent exits non-zero with a normal message
+    rather than raising, so this case is indistinguishable from a lint failure
+    unless the output is inspected.
+    """
+    return "No module named" in ((result.stderr or "") + (result.stdout or ""))
 
 
 def run(args: list[str]) -> subprocess.CompletedProcess | None:
@@ -43,18 +71,20 @@ def main() -> None:
     if not os.path.exists(file_path):
         sys.exit(0)
 
-    black_result = run([sys.executable, "-m", "black", file_path])
-    if black_result is None:
+    python = project_python()
+
+    black_result = run([python, "-m", "black", file_path])
+    if black_result is None or missing_module(black_result):
         # black not installed / not runnable - tolerate silently.
         sys.exit(0)
 
-    ruff_fix_result = run([sys.executable, "-m", "ruff", "check", "--fix", file_path])
-    if ruff_fix_result is None:
+    ruff_fix_result = run([python, "-m", "ruff", "check", "--fix", file_path])
+    if ruff_fix_result is None or missing_module(ruff_fix_result):
         # ruff not installed / not runnable - tolerate silently.
         sys.exit(0)
 
-    ruff_check_result = run([sys.executable, "-m", "ruff", "check", file_path])
-    if ruff_check_result is None:
+    ruff_check_result = run([python, "-m", "ruff", "check", file_path])
+    if ruff_check_result is None or missing_module(ruff_check_result):
         sys.exit(0)
 
     if ruff_check_result.returncode != 0:
