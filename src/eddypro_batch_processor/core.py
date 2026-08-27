@@ -146,6 +146,7 @@ def run_subprocess_with_monitoring(
     scenario_suffix: str = "",
     log_output: bool = True,
     monitoring_enabled: bool = True,
+    progress_dir: Path | None = None,
 ) -> int:
     """
     Execute a subprocess command with performance monitoring.
@@ -165,6 +166,8 @@ def run_subprocess_with_monitoring(
         log_output: Whether to mirror subprocess output into the log
         monitoring_enabled: When False, no monitor is started and no metrics files
             are written
+        progress_dir: Optional directory whose file count proxies work completed,
+            recorded as a throughput series alongside CPU
 
     Returns:
         Subprocess return code, or -1 if an exception occurs
@@ -178,6 +181,7 @@ def run_subprocess_with_monitoring(
             output_dir=metrics_output_dir,
             scenario_suffix=scenario_suffix,
             enabled=monitoring_enabled,
+            progress_dir=progress_dir,
         ) as monitor:
             process = subprocess.Popen(  # nosec B603
                 command,
@@ -297,6 +301,10 @@ def run_eddypro_with_monitoring(
         scenario_suffix=f"{scenario_suffix}_rp" if scenario_suffix else "rp",
         log_output=log_output,
         monitoring_enabled=monitoring_enabled,
+        # One binned-cospectra file per flux averaging period, so counting them
+        # measures periods completed. Throughput is the only signal that tells a
+        # saturated fast core from a saturated slow one.
+        progress_dir=output_dir / "eddypro_binned_cospectra",
     )
     if rp_return_code != 0:
         logging.error(f"eddypro_rp failed with return code {rp_return_code}")

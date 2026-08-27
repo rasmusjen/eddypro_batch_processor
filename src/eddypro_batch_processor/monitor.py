@@ -55,6 +55,8 @@ METRICS_FIELDNAMES = [
     "read_iops",
     "write_iops",
     "num_processes",
+    "work_items",
+    "work_items_per_s",
     "system_cpu_percent",
     "system_memory_percent",
     "system_memory_used_mb",
@@ -79,6 +81,8 @@ class PerformanceMonitor:
         interval_seconds: float = 0.5,
         output_dir: str | Path | None = None,
         scenario_suffix: str = "",
+        progress_dir: str | Path | None = None,
+        progress_glob: str = "*",
     ):
         """
         Initialize the performance monitor.
@@ -87,6 +91,12 @@ class PerformanceMonitor:
             interval_seconds: Sampling interval in seconds (default: 0.5)
             output_dir: Directory to write metrics files (default: current directory)
             scenario_suffix: Suffix to append to output filenames for scenario runs
+            progress_dir: Optional directory whose file count is a proxy for work
+                completed. CPU alone cannot tell a saturated fast core from a
+                saturated slow one -- on a hybrid P-core/E-core CPU a demoted run
+                reports the same ~100% of a core while delivering roughly half the
+                throughput. Counting finished work makes that visible.
+            progress_glob: Pattern selecting the files to count in progress_dir
 
         Raises:
             ImportError: If psutil is not available
@@ -100,6 +110,8 @@ class PerformanceMonitor:
         self.interval_seconds = max(0.1, interval_seconds)  # Minimum 0.1s
         self.output_dir = Path(output_dir) if output_dir else Path.cwd()
         self.scenario_suffix = scenario_suffix
+        self.progress_dir = Path(progress_dir) if progress_dir else None
+        self.progress_glob = progress_glob
 
         # Number of logical CPUs, used to normalise process CPU onto a 0-100 scale
         # so it is directly comparable with psutil.cpu_percent().
@@ -133,6 +145,7 @@ class PerformanceMonitor:
         self._prev_time: float | None = None
         self._prev_io: tuple[float, float, float, float] | None = None
         self._prev_system_io: tuple[float, float] | None = None
+        self._prev_work_items: int | None = None
 
         # Output file paths
         self._metrics_csv_path = self._get_output_path("metrics.csv")
@@ -176,6 +189,7 @@ class PerformanceMonitor:
         self._prev_time = None
         self._prev_io = None
         self._prev_system_io = None
+        self._prev_work_items = None
 
         # Prime the system-wide CPU counter. The first call after import always
         # returns 0.0 because there is no previous measurement to diff against.
@@ -330,6 +344,7 @@ class PerformanceMonitor:
             }
             sample.update(self._collect_system_metrics(elapsed))
             sample.update(self._collect_process_metrics(elapsed))
+            sample.update(self._collect_progress_metrics(elapsed))
 
             self._prev_time = timestamp
         except Exception as e:
@@ -337,6 +352,38 @@ class PerformanceMonitor:
             return None
         else:
             return sample
+
+    def _collect_progress_metrics(self, elapsed: float | None) -> dict[str, Any]:
+        """Count completed work items and derive a rate.
+
+        Throughput is the only signal that distinguishes a saturated fast core
+        from a saturated slow one. CPU utilisation reads ~100% of a core either
+        way, so without this a run demoted onto an efficiency core looks
+        perfectly healthy while taking twice as long.
+        """
+        metrics: dict[str, Any] = {"work_items": 0, "work_items_per_s": 0.0}
+        if self.progress_dir is None:
+            return metrics
+
+        try:
+            # The directory is created by the workload, so it legitimately does
+            # not exist for the first samples of a run.
+            count = (
+                sum(1 for _ in self.progress_dir.glob(self.progress_glob))
+                if self.progress_dir.is_dir()
+                else 0
+            )
+        except OSError as e:
+            logger.debug(f"Failed to count progress items: {e}")
+            return metrics
+
+        metrics["work_items"] = count
+        if self._prev_work_items is not None and elapsed and elapsed > 0:
+            metrics["work_items_per_s"] = round(
+                max(0, count - self._prev_work_items) / elapsed, 4
+            )
+        self._prev_work_items = count
+        return metrics
 
     def _collect_system_metrics(self, elapsed: float | None) -> dict[str, Any]:
         """Collect system-wide metrics, converting disk counters into rates."""
@@ -679,6 +726,8 @@ def create_monitor(
     interval_seconds: float = 0.5,
     output_dir: str | Path | None = None,
     scenario_suffix: str = "",
+    progress_dir: str | Path | None = None,
+    progress_glob: str = "*",
 ) -> PerformanceMonitor | None:
     """
     Create a performance monitor instance with error handling.
@@ -687,6 +736,8 @@ def create_monitor(
         interval_seconds: Sampling interval in seconds (default: 0.5)
         output_dir: Directory to write metrics files
         scenario_suffix: Suffix for scenario-specific output files
+        progress_dir: Optional directory whose file count proxies work completed
+        progress_glob: Pattern selecting the files to count in progress_dir
 
     Returns:
         PerformanceMonitor instance, or None if psutil is not available
@@ -703,6 +754,8 @@ def create_monitor(
             interval_seconds=interval_seconds,
             output_dir=output_dir,
             scenario_suffix=scenario_suffix,
+            progress_dir=progress_dir,
+            progress_glob=progress_glob,
         )
     except ImportError as e:
         logger.warning(f"Failed to create performance monitor: {e}")
@@ -731,11 +784,19 @@ class MonitoredOperation:
         scenario_suffix: str = "",
         process_pid: int | None = None,
         enabled: bool = True,
+        progress_dir: str | Path | None = None,
+        progress_glob: str = "*",
     ):
         """Initialize monitored operation context."""
         self.enabled = enabled
         self.monitor = (
-            create_monitor(interval_seconds, output_dir, scenario_suffix)
+            create_monitor(
+                interval_seconds,
+                output_dir,
+                scenario_suffix,
+                progress_dir,
+                progress_glob,
+            )
             if enabled
             else None
         )

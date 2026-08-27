@@ -5,6 +5,7 @@ Tests the PerformanceMonitor class and related functionality with mocked
 dependencies to ensure deterministic behavior.
 """
 
+import csv
 import itertools
 import json
 import tempfile
@@ -20,6 +21,7 @@ try:
 except ImportError:
     psutil_module = None
 
+from eddypro_batch_processor import monitor as monitor_mod
 from eddypro_batch_processor.monitor import (
     MonitoredOperation,
     PerformanceMonitor,
@@ -537,3 +539,67 @@ class TestErrorHandling:
             # All threads should have gotten valid results
             assert len(results) == 10
             assert all(isinstance(count, int) for count in results)
+
+
+class TestProgressThroughput:
+    """The work-rate series must survive the whole wiring path.
+
+    These deliberately go through `create_monitor` and `MonitoredOperation`
+    rather than constructing `PerformanceMonitor` directly: the first version of
+    this feature accepted `progress_dir` at every layer but forgot to forward it
+    to the constructor, so every run silently recorded zero work items. A test
+    that built the monitor directly would have passed.
+    """
+
+    def test_create_monitor_forwards_progress_args(self, tmp_path):
+        mon = monitor_mod.create_monitor(
+            output_dir=tmp_path, progress_dir=tmp_path / "work", progress_glob="*.bin"
+        )
+        assert mon is not None
+        assert mon.progress_dir == tmp_path / "work"
+        assert mon.progress_glob == "*.bin"
+
+    def test_monitored_operation_forwards_progress_args(self, tmp_path):
+        op = monitor_mod.MonitoredOperation(
+            output_dir=tmp_path, progress_dir=tmp_path / "work"
+        )
+        assert op.monitor is not None
+        assert op.monitor.progress_dir == tmp_path / "work"
+
+    def test_work_items_counted_as_files_appear(self, tmp_path):
+        """A growing directory must show up as a non-zero work count."""
+        work = tmp_path / "work"
+        work.mkdir()
+        mon = monitor_mod.create_monitor(
+            interval_seconds=0.1, output_dir=tmp_path, progress_dir=work
+        )
+        assert mon is not None
+        mon.start_monitoring()
+        try:
+            for i in range(5):
+                (work / f"item_{i}.dat").write_text("x", encoding="utf-8")
+                time.sleep(0.15)
+        finally:
+            mon.stop_monitoring()
+
+        rows = list(
+            csv.DictReader(
+                (tmp_path / "metrics.csv").open(newline="", encoding="utf-8")
+            )
+        )
+        counts = [int(float(r["work_items"])) for r in rows if r.get("work_items")]
+        assert counts, "work_items column was never populated"
+        assert max(counts) >= 3, f"expected files to be counted, saw {counts}"
+
+    def test_missing_progress_dir_is_not_an_error(self, tmp_path):
+        """The workload creates the directory, so early samples precede it."""
+        mon = monitor_mod.create_monitor(
+            interval_seconds=0.1,
+            output_dir=tmp_path,
+            progress_dir=tmp_path / "never_created",
+        )
+        assert mon is not None
+        mon.start_monitoring()
+        time.sleep(0.25)
+        summary = mon.stop_monitoring()
+        assert summary  # completed without raising
