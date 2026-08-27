@@ -369,3 +369,69 @@ class TestSubprocessOutputEchoing:
         assert any(
             self.MARKER in str(call) for call in mock_print.call_args_list
         ), "live progress was dropped entirely"
+
+
+class TestCpuAffinity:
+    """Pinning is an optimisation, so a bad value must never stop a run."""
+
+    def test_performance_cores_derived_from_core_counts(self):
+        """8 P-cores (2 threads each) + 4 E-cores = 20 logical / 12 physical."""
+        with (patch("eddypro_batch_processor.core.psutil.cpu_count") as cpu_count,):
+            cpu_count.side_effect = lambda logical=True: 20 if logical else 12
+            assert core.resolve_performance_cores() == list(range(16))
+
+    def test_no_hybrid_split_returns_none(self):
+        """A uniform SMT CPU (8 cores / 16 threads) has no E-cores to avoid."""
+        with patch("eddypro_batch_processor.core.psutil.cpu_count") as cpu_count:
+            cpu_count.side_effect = lambda logical=True: 16 if logical else 8
+            assert core.resolve_performance_cores() is None
+
+    def test_no_smt_returns_none(self):
+        """Without SMT the thread-count trick cannot identify core types."""
+        with patch("eddypro_batch_processor.core.psutil.cpu_count") as cpu_count:
+            cpu_count.side_effect = lambda logical=True: 8
+            assert core.resolve_performance_cores() is None
+
+    def test_absent_setting_leaves_affinity_untouched(self):
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            core.apply_cpu_affinity({})
+            proc.assert_not_called()
+
+    def test_explicit_list_is_applied(self):
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            core.apply_cpu_affinity({"cpu_affinity": [0, 1, 2, 3]})
+            proc.return_value.cpu_affinity.assert_called_once_with([0, 1, 2, 3])
+
+    def test_performance_keyword_uses_detection(self):
+        with (
+            patch("eddypro_batch_processor.core.psutil.Process") as proc,
+            patch(
+                "eddypro_batch_processor.core.resolve_performance_cores",
+                return_value=[0, 1],
+            ),
+        ):
+            core.apply_cpu_affinity({"cpu_affinity": "performance"})
+            proc.return_value.cpu_affinity.assert_called_once_with([0, 1])
+
+    def test_performance_keyword_no_split_is_a_no_op(self):
+        with (
+            patch("eddypro_batch_processor.core.psutil.Process") as proc,
+            patch(
+                "eddypro_batch_processor.core.resolve_performance_cores",
+                return_value=None,
+            ),
+        ):
+            core.apply_cpu_affinity({"cpu_affinity": "performance"})
+            proc.return_value.cpu_affinity.assert_not_called()
+
+    def test_garbage_value_is_ignored_not_raised(self):
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            core.apply_cpu_affinity({"cpu_affinity": "wibble"})
+            core.apply_cpu_affinity({"cpu_affinity": {"a": 1}})
+            proc.return_value.cpu_affinity.assert_not_called()
+
+    def test_failure_to_pin_does_not_abort_the_run(self):
+        """A multi-hour run must not die because affinity could not be set."""
+        with patch("eddypro_batch_processor.core.psutil.Process") as proc:
+            proc.return_value.cpu_affinity.side_effect = OSError("denied")
+            core.apply_cpu_affinity({"cpu_affinity": [0, 1]})  # must not raise

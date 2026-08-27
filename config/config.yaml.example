@@ -33,6 +33,17 @@ multiprocessing: False  # Set to True to process years in parallel
 # Rule of thumb: one worker per year, bounded by physical cores and disk throughput
 max_processes: 16
 
+# CPU affinity for the run and every process it launches.
+#   null           -> leave scheduling to the OS (default)
+#   performance    -> auto-detect and pin to the performance cores
+#   [0, 1, 2, ...] -> pin to these logical CPU indices
+# On Intel hybrid CPUs (12th gen and later) the OS will park a long-running
+# background job on the efficiency cores. EddyPro is single-threaded, so this
+# costs roughly a factor of two -- and CPU monitoring cannot see it, because a
+# saturated efficiency core reports the same ~100% as a saturated performance
+# core. Pinning also makes run times reproducible.
+cpu_affinity: null
+
 # Control output streaming (EddyPro subprocess outputs)
 stream_output: True  # Set to False to keep EddyPro output quiet
 

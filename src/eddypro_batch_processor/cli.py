@@ -556,6 +556,10 @@ def cmd_run(args: argparse.Namespace) -> int:  # noqa: PLR0912, PLR0915
         config.get("log_backup_count"),
     )
 
+    # Pin before any work starts; ProcessPoolExecutor workers and the EddyPro
+    # executables they launch all inherit this process's affinity.
+    core.apply_cpu_affinity(config)
+
     # Collect INI parameter overrides
     ini_parameters = {}
     if args.rot_meth is not None:
@@ -831,6 +835,10 @@ def cmd_scenarios(args: argparse.Namespace) -> int:  # noqa: PLR0911
         config.get("log_max_bytes"),
         config.get("log_backup_count"),
     )
+
+    # Pin before any work starts; ProcessPoolExecutor workers and the EddyPro
+    # executables they launch all inherit this process's affinity.
+    core.apply_cpu_affinity(config)
 
     # Apply CLI overrides
     site_id = args.site if args.site else config.get("site_id")
