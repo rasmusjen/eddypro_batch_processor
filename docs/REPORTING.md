@@ -226,6 +226,11 @@ timestamp,relative_time,system_cpu_percent,system_memory_total,system_memory_ava
 - `system_memory_total`, `system_memory_available`, `system_memory_percent`
 - `system_disk_read_bytes`, `system_disk_write_bytes`, `system_disk_read_count`, `system_disk_write_count`
 - `process_cpu_percent`, `process_memory_rss`, `process_memory_vms`, `process_memory_percent`
+- `work_items`, `work_items_per_s`: completed work items and their rate, when a
+  progress directory is configured. For `run` these count binned-cospectra
+  files, i.e. flux averaging periods finished. This is the only column that
+  distinguishes a saturated *fast* core from a saturated *slow* one -- see
+  [MULTI_YEAR_RUNS.md](MULTI_YEAR_RUNS.md) on hybrid-CPU core placement
 - `process_io_read_bytes`, `process_io_write_bytes`, `process_io_read_count`, `process_io_write_count`
 
 Column presence can vary by platform and psutil capabilities. The CSV is a raw
